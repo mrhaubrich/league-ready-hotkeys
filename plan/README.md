@@ -14,7 +14,7 @@ Selection rule: choose the highest-RICE unblocked task in the active phase; depe
 | LRH-006 | Add tray lifecycle and startup toggle | SHOULD | Complete | LRH-005 |
 | LRH-007 | Harden reconnect, shutdown, and secrets | MUST | Complete | LRH-006 |
 | LRH-008 | Validate and package portable release | MUST | Complete | LRH-007 |
-| LRH-009 | Add default always-running background mode | MUST | Validation-required | LRH-008 |
+| LRH-009 | Add default always-running background mode | MUST | Complete | LRH-008 |
 | LRH-010 | Add bottom-right ready-check notification window | MUST | Planned | LRH-009 |
 | LRH-011 | Add notification Accept/Decline buttons | MUST | Locked | LRH-010 |
 | LRH-012 | Add UI/tray status and notification preferences | SHOULD | Locked | LRH-010 |

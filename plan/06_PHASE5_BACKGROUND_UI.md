@@ -20,7 +20,7 @@ Exit criteria:
 
 Priority: MUST. Dependencies: LRH-008. Status: Planned.
 
-Implement the production application orchestration for no-argument launch: discovery worker, LCU polling/reconnect loop, Windows message loop, tray icon, conditional F1/F2 registration, and clean shutdown. The current implementation intentionally leaves notification rendering to LRH-010.
+Implement the production application orchestration for no-argument launch: discovery worker, LCU polling/reconnect loop, Windows message loop, tray icon, conditional F1/F2 registration, and clean shutdown. The current implementation intentionally leaves notification rendering to LRH-010. User validation is complete for launch, tray exit, startup toggle/checkmark, and menu layout.
 
 Acceptance: no-argument launch remains alive with League absent, discovers a running client, transitions into and out of ready-check state, releases hotkeys on disconnect, and exits from the tray without leaving an icon.
 
