@@ -1,10 +1,18 @@
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy)]
-pub struct ReconnectPolicy { pub base: Duration, pub cap: Duration }
+pub struct ReconnectPolicy {
+    pub base: Duration,
+    pub cap: Duration,
+}
 
 impl Default for ReconnectPolicy {
-    fn default() -> Self { Self { base: Duration::from_millis(250), cap: Duration::from_secs(5) } }
+    fn default() -> Self {
+        Self {
+            base: Duration::from_millis(250),
+            cap: Duration::from_secs(5),
+        }
+    }
 }
 
 impl ReconnectPolicy {

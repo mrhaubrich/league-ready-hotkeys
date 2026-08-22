@@ -1,6 +1,6 @@
 # Delivery plan
 
-Active phase: Phase 2 — Ready-check vertical slice.
+Active phase: Phase 4 — Release.
 
 Selection rule: choose the highest-RICE unblocked task in the active phase; dependencies, security gates, and human decisions always take precedence.
 

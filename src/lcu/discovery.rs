@@ -1,6 +1,6 @@
-use thiserror::Error;
 use std::fmt;
 use std::path::PathBuf;
+use thiserror::Error;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct LcuCredentials {
@@ -11,7 +11,12 @@ pub struct LcuCredentials {
 
 impl fmt::Debug for LcuCredentials {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.debug_struct("LcuCredentials").field("port", &self.port).field("password", &"[REDACTED]").field("protocol", &self.protocol).finish()
+        formatter
+            .debug_struct("LcuCredentials")
+            .field("port", &self.port)
+            .field("password", &"[REDACTED]")
+            .field("protocol", &self.protocol)
+            .finish()
     }
 }
 
@@ -45,11 +50,18 @@ pub fn discover_lockfile() -> Result<PathBuf, LockfileError> {
     use sysinfo::System;
     let mut system = System::new();
     system.refresh_processes();
-    let process = system.processes_by_name("LeagueClientUx.exe").next()
+    let process = system
+        .processes_by_name("LeagueClientUx.exe")
+        .next()
         .ok_or(LockfileError::ClientNotRunning)?;
     let executable = process.exe().ok_or(LockfileError::ExecutableUnavailable)?;
-    let lockfile = executable.parent().ok_or(LockfileError::ExecutableUnavailable)?.join("lockfile");
-    if !lockfile.is_file() { return Err(LockfileError::LockfileUnavailable); }
+    let lockfile = executable
+        .parent()
+        .ok_or(LockfileError::ExecutableUnavailable)?
+        .join("lockfile");
+    if !lockfile.is_file() {
+        return Err(LockfileError::LockfileUnavailable);
+    }
     Ok(lockfile)
 }
 

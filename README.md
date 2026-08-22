@@ -25,3 +25,7 @@ To validate endpoint routing explicitly, run `league-ready-hotkeys.exe --check-a
 Startup registration can be validated with `--enable-startup`, `--check-startup`, and `--disable-startup`. These commands use only the current user's `HKCU` Run key and require no administrator rights.
 
 Tray lifecycle can be validated with `--check-tray`; it adds the native tray icon for 30 seconds and removes it on exit.
+
+## Release validation
+
+From PowerShell, run `.scripts\validate-release.ps1`. It runs formatting, Clippy, all tests, and the optimized release build, then prints the portable executable size and SHA-256 checksum. Copy `target\release\league-ready-hotkeys.exe` together with that checksum; no installer or registry export is required.

@@ -1,24 +1,36 @@
 use crate::AppState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HotkeyAction { Accept, Decline }
+pub enum HotkeyAction {
+    Accept,
+    Decline,
+}
 
 #[derive(Debug, Default)]
-pub struct ActionGate { active: bool, in_flight: bool }
+pub struct ActionGate {
+    active: bool,
+    in_flight: bool,
+}
 
 impl ActionGate {
     pub fn update_ready_check(&mut self, active: bool) {
         self.active = active;
-        if !active { self.in_flight = false; }
+        if !active {
+            self.in_flight = false;
+        }
     }
 
     pub fn begin(&mut self, action: HotkeyAction) -> Option<HotkeyAction> {
-        if !self.active || self.in_flight { return None; }
+        if !self.active || self.in_flight {
+            return None;
+        }
         self.in_flight = true;
         Some(action)
     }
 
-    pub fn finish(&mut self) { self.in_flight = false; }
+    pub fn finish(&mut self) {
+        self.in_flight = false;
+    }
 }
 
 /// Pure application state transitions. Windows and transport code stay outside this module.
@@ -50,7 +62,10 @@ mod tests {
         assert_eq!(gate.begin(HotkeyAction::Accept), Some(HotkeyAction::Accept));
         assert_eq!(gate.begin(HotkeyAction::Decline), None);
         gate.finish();
-        assert_eq!(gate.begin(HotkeyAction::Decline), Some(HotkeyAction::Decline));
+        assert_eq!(
+            gate.begin(HotkeyAction::Decline),
+            Some(HotkeyAction::Decline)
+        );
     }
 
     #[test]

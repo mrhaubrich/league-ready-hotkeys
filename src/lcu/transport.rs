@@ -1,10 +1,14 @@
 #![cfg(windows)]
 
+use futures_util::{SinkExt, StreamExt};
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
 use thiserror::Error;
-use futures_util::{SinkExt, StreamExt};
-use tokio_tungstenite::{connect_async_tls_with_config, tungstenite::{client::IntoClientRequest, Message}, Connector};
+use tokio_tungstenite::{
+    connect_async_tls_with_config,
+    tungstenite::{client::IntoClientRequest, Message},
+    Connector,
+};
 
 use super::{parse_ready_check_event, LcuCredentials, ReadyCheck, ACCEPT, DECLINE, READY_CHECK};
 use crate::reconnect::ReconnectPolicy;
@@ -73,34 +77,61 @@ impl LcuClient {
 
     pub async fn next_ready_check_event(&self) -> Result<ReadyCheck, TransportError> {
         let websocket_url = self.base_url.replacen("https://", "wss://", 1);
-        let mut request = websocket_url.into_client_request().map_err(|error| TransportError::WebSocket(Box::new(error)))?;
+        let mut request = websocket_url
+            .into_client_request()
+            .map_err(|error| TransportError::WebSocket(Box::new(error)))?;
         let value = format!("riot:{}", self.password);
         let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, value);
-        request.headers_mut().insert("Authorization", format!("Basic {encoded}").parse().expect("basic auth header"));
-        request.headers_mut().insert("Origin", format!("https://127.0.0.1:{}", self.base_url.rsplit(':').next().unwrap_or_default()).parse().expect("origin header"));
+        request.headers_mut().insert(
+            "Authorization",
+            format!("Basic {encoded}")
+                .parse()
+                .expect("basic auth header"),
+        );
+        request.headers_mut().insert(
+            "Origin",
+            format!(
+                "https://127.0.0.1:{}",
+                self.base_url.rsplit(':').next().unwrap_or_default()
+            )
+            .parse()
+            .expect("origin header"),
+        );
         let tls = native_tls::TlsConnector::builder()
             .danger_accept_invalid_certs(true)
             .build()
             .map_err(|error| TransportError::Tls(error.to_string()))?;
         let connector = Connector::NativeTls(tls);
         let (mut socket, _) = connect_async_tls_with_config(request, None, false, Some(connector))
-            .await.map_err(|error| TransportError::WebSocket(Box::new(error)))?;
-        socket.send(Message::Text(r#"[5,"OnJsonApiEvent"]"#.into())).await.map_err(|error| TransportError::WebSocket(Box::new(error)))?;
+            .await
+            .map_err(|error| TransportError::WebSocket(Box::new(error)))?;
+        socket
+            .send(Message::Text(r#"[5,"OnJsonApiEvent"]"#.into()))
+            .await
+            .map_err(|error| TransportError::WebSocket(Box::new(error)))?;
         while let Some(message) = socket.next().await {
             let message = message.map_err(|error| TransportError::WebSocket(Box::new(error)))?;
             if let Message::Text(text) = message {
-                let Ok(event) = serde_json::from_str::<Value>(&text) else { continue; };
+                let Ok(event) = serde_json::from_str::<Value>(&text) else {
+                    continue;
+                };
                 if let Some(payload) = event.get(2) {
                     if payload.get("uri").and_then(Value::as_str) == Some(READY_CHECK) {
-                        return parse_ready_check_event(payload).map_err(|error| TransportError::Event(error.to_string()));
+                        return parse_ready_check_event(payload)
+                            .map_err(|error| TransportError::Event(error.to_string()));
                     }
                 }
             }
         }
-        Err(TransportError::WebSocket(Box::new(tokio_tungstenite::tungstenite::Error::ConnectionClosed)))
+        Err(TransportError::WebSocket(Box::new(
+            tokio_tungstenite::tungstenite::Error::ConnectionClosed,
+        )))
     }
 
-    pub async fn next_ready_check_event_with_retry(&self, attempts: u32) -> Result<ReadyCheck, TransportError> {
+    pub async fn next_ready_check_event_with_retry(
+        &self,
+        attempts: u32,
+    ) -> Result<ReadyCheck, TransportError> {
         let policy = ReconnectPolicy::default();
         let mut attempt = 0;
         loop {

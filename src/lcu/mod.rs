@@ -1,7 +1,7 @@
 mod discovery;
-pub use discovery::{parse_lockfile, LcuCredentials, LockfileError};
 #[cfg(windows)]
 pub use discovery::discover_lockfile;
+pub use discovery::{parse_lockfile, LcuCredentials, LockfileError};
 mod ready_check;
 pub use ready_check::{parse_ready_check, parse_ready_check_event, ReadyCheck, ReadyCheckError};
 #[cfg(windows)]
