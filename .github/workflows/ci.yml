@@ -1,16 +1,42 @@
 name: CI
+
 on:
   push:
+    branches: [main, master]
   pull_request:
+
 jobs:
-  check:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: stable-x86_64-pc-windows-msvc
           components: rustfmt, clippy
-      - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test --all-targets
-      - run: cargo build --release
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --all-targets
+      - name: Build release
+        run: cargo build --release
+      - name: Prepare artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item target/release/league-ready-hotkeys.exe dist/league-ready-hotkeys.exe
+          Copy-Item assets/tray-icon.ico dist/tray-icon.ico
+          Get-FileHash dist/league-ready-hotkeys.exe -Algorithm SHA256 | Format-List
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: league-ready-hotkeys-windows-x64-exe
+          path: dist/league-ready-hotkeys.exe
+      - name: Upload portable bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: league-ready-hotkeys-windows-x64-portable
+          path: dist

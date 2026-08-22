@@ -33,3 +33,5 @@ Launching the executable without arguments now starts the background utility. It
 ## Release validation
 
 From PowerShell, run `.scripts\validate-release.ps1`. It runs formatting, Clippy, all tests, and the optimized release build, then prints the portable executable size and SHA-256 checksum. Copy `target\release\league-ready-hotkeys.exe` together with that checksum; no installer or registry export is required.
+
+GitHub Actions builds the Windows x64 release on every push and pull request. The workflow publishes an executable artifact and a portable bundle containing the executable and tray icon asset. Until the tray icon is embedded as a Windows resource, use the portable bundle for a complete installation.
