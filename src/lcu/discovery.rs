@@ -3,6 +3,10 @@ use thiserror::Error;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LcuCredentials { pub port: u16, pub password: String, pub protocol: String }
 
+impl LcuCredentials {
+    pub fn base_url(&self) -> String { format!("{}://127.0.0.1:{}", self.protocol, self.port) }
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum LockfileError {
     #[error("lockfile has the wrong number of fields")]

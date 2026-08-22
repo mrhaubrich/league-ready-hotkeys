@@ -11,3 +11,5 @@ The League Client API is a local, unsupported interface. The application must ne
 ## Development
 
 Requires the stable Rust MSVC toolchain. Run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test --all-targets`.
+
+The current foundation parses an LCU lockfile and provides the Windows-only authenticated transport boundary. No credentials are written to disk or included in diagnostics.
