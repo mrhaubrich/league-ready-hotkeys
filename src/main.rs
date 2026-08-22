@@ -6,6 +6,17 @@ fn main() {
         run_hotkey_diagnostic();
         return;
     }
+    if matches!(mode, Some("--check-startup") | Some("--enable-startup") | Some("--disable-startup")) {
+        let executable = std::env::current_exe().expect("current executable path");
+        let result = match mode {
+            Some("--check-startup") => league_ready_hotkeys::windows::startup::is_enabled(),
+            Some("--enable-startup") => league_ready_hotkeys::windows::startup::set_enabled(&executable, true).map(|_| true),
+            Some("--disable-startup") => league_ready_hotkeys::windows::startup::set_enabled(&executable, false).map(|_| false),
+            _ => unreachable!(),
+        };
+        match result { Ok(enabled) => println!("startup enabled: {enabled}"), Err(error) => { eprintln!("startup registry operation failed: {error}"); std::process::exit(1); } }
+        return;
+    }
     if !matches!(mode, Some("--check-lockfile") | Some("--watch-ready-check") | Some("--check-action")) {
         println!("use --check-lockfile, --watch-ready-check, or --check-action accept|decline");
         return;
