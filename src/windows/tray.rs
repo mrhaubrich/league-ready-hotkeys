@@ -8,12 +8,13 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, DestroyIcon, DestroyMenu, GetCursorPos, LoadImageW,
     SetForegroundWindow, TrackPopupMenu, HICON, IMAGE_ICON, LR_DEFAULTSIZE, LR_LOADFROMFILE,
-    MF_STRING, TPM_RIGHTBUTTON, WM_USER,
+    MF_CHECKED, MF_SEPARATOR, MF_STRING, TPM_RETURNCMD, TPM_RIGHTBUTTON, WM_USER,
 };
 
 pub const TRAY_ID: u32 = 1;
 pub const TRAY_MESSAGE: u32 = WM_USER + 1;
 pub const MENU_EXIT: u32 = 1;
+pub const MENU_STARTUP: u32 = 2;
 
 pub struct TrayIcon {
     data: NOTIFYICONDATAW,
@@ -84,9 +85,21 @@ impl TrayIcon {
         }
     }
 
-    pub fn show_menu(&self) -> bool {
+    pub fn show_menu(&self, startup_enabled: bool) -> u32 {
         let menu = unsafe { CreatePopupMenu().expect("create tray menu") };
         unsafe {
+            let flags = if startup_enabled {
+                MF_STRING | MF_CHECKED
+            } else {
+                MF_STRING
+            };
+            let _ = AppendMenuW(
+                menu,
+                flags,
+                MENU_STARTUP as usize,
+                windows::core::w!("Start with Windows"),
+            );
+            let _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
             let _ = AppendMenuW(
                 menu,
                 MF_STRING,
@@ -99,10 +112,10 @@ impl TrayIcon {
             let _ = GetCursorPos(&mut point);
             let _ = SetForegroundWindow(self.data.hWnd);
         }
-        let _ = unsafe {
+        let command = unsafe {
             TrackPopupMenu(
                 menu,
-                TPM_RIGHTBUTTON,
+                TPM_RIGHTBUTTON | TPM_RETURNCMD,
                 point.x,
                 point.y,
                 0,
@@ -113,7 +126,7 @@ impl TrayIcon {
         unsafe {
             let _ = DestroyMenu(menu);
         }
-        true
+        command.0 as u32
     }
 }
 

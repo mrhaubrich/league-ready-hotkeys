@@ -35,6 +35,10 @@ fn main() {
         }
         return;
     }
+    if mode.is_none() {
+        run_background();
+        return;
+    }
     if !matches!(
         mode,
         Some("--check-lockfile") | Some("--watch-ready-check") | Some("--check-action")
@@ -112,6 +116,175 @@ fn main() {
             std::process::exit(1);
         }
     }
+}
+
+#[cfg(windows)]
+fn run_background() {
+    use std::time::{Duration, Instant};
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DestroyWindow, PeekMessageW, RegisterClassW, CS_HREDRAW, CS_VREDRAW,
+        HWND_MESSAGE, MSG, PM_REMOVE, WM_APP, WM_HOTKEY, WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPED,
+    };
+    let class_name = windows::core::w!("LeagueReadyHotkeysBackgroundWindow");
+    unsafe {
+        let _ = RegisterClassW(&WNDCLASSW {
+            lpfnWndProc: Some(tray_wnd_proc),
+            hInstance: Default::default(),
+            lpszClassName: class_name,
+            style: CS_HREDRAW | CS_VREDRAW,
+            ..Default::default()
+        });
+    }
+    let owner = unsafe {
+        CreateWindowExW(
+            Default::default(),
+            class_name,
+            windows::core::w!("League Ready Hotkeys"),
+            WS_OVERLAPPED,
+            0,
+            0,
+            0,
+            0,
+            HWND_MESSAGE,
+            None,
+            None,
+            None,
+        )
+    }
+    .unwrap_or_else(|error| {
+        eprintln!("could not create background window: {error}");
+        std::process::exit(1);
+    });
+    let icon_path = tray_icon_path();
+    let mut tray = league_ready_hotkeys::windows::tray::TrayIcon::with_icon(owner, &icon_path)
+        .unwrap_or_else(|error| {
+            eprintln!("could not load tray icon: {error}");
+            std::process::exit(1);
+        });
+    if !tray.add() {
+        eprintln!("could not add tray icon");
+        std::process::exit(1);
+    }
+    let mut hotkeys = league_ready_hotkeys::windows::hotkeys::HotkeyManager::new(owner);
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("create background runtime");
+    let mut client: Option<league_ready_hotkeys::lcu::transport::LcuClient> = None;
+    let mut active = false;
+    let mut next_poll = Instant::now();
+    println!(
+        "League Ready Hotkeys running in background; F1/F2 activate only during a ready check"
+    );
+    'background: loop {
+        let mut message = MSG::default();
+        while unsafe { PeekMessageW(&mut message, HWND(std::ptr::null_mut()), 0, 0, PM_REMOVE) }
+            .as_bool()
+        {
+            if message.message == WM_APP + 1 && message.lParam.0 as u32 == WM_RBUTTONUP {
+                let startup_enabled =
+                    league_ready_hotkeys::windows::startup::is_enabled().unwrap_or(false);
+                let command = tray.show_menu(startup_enabled);
+                if command == league_ready_hotkeys::windows::tray::MENU_EXIT
+                    || TRAY_EXIT_REQUESTED.swap(false, std::sync::atomic::Ordering::AcqRel)
+                {
+                    break 'background;
+                }
+                if command == league_ready_hotkeys::windows::tray::MENU_STARTUP
+                    || STARTUP_TOGGLE_REQUESTED.swap(false, std::sync::atomic::Ordering::AcqRel)
+                {
+                    if let Ok(enabled) = league_ready_hotkeys::windows::startup::is_enabled() {
+                        let executable = std::env::current_exe().expect("current executable path");
+                        let _ = league_ready_hotkeys::windows::startup::set_enabled(
+                            &executable,
+                            !enabled,
+                        );
+                    }
+                }
+            }
+            if message.message == WM_APP + 2 {
+                break 'background;
+            }
+            if message.message == WM_HOTKEY && active {
+                let action = match message.wParam.0 as i32 {
+                    league_ready_hotkeys::windows::hotkeys::ACCEPT_HOTKEY_ID => Some("accept"),
+                    league_ready_hotkeys::windows::hotkeys::DECLINE_HOTKEY_ID => Some("decline"),
+                    _ => None,
+                };
+                if let (Some(action), Some(lcu)) = (action, client.as_ref()) {
+                    let result = runtime.block_on(async {
+                        if action == "accept" {
+                            lcu.accept().await
+                        } else {
+                            lcu.decline().await
+                        }
+                    });
+                    if let Err(error) = result {
+                        eprintln!("LCU action failed: {error}");
+                    }
+                    active = false;
+                    let _ = hotkeys.set_enabled(false);
+                }
+            }
+        }
+        if Instant::now() >= next_poll {
+            next_poll = Instant::now() + Duration::from_secs(2);
+            if let Ok(path) = league_ready_hotkeys::lcu::discover_lockfile() {
+                if let Ok(contents) = std::fs::read_to_string(path) {
+                    if let Ok(credentials) = league_ready_hotkeys::lcu::parse_lockfile(&contents) {
+                        if let Ok(lcu) =
+                            league_ready_hotkeys::lcu::transport::LcuClient::new(&credentials)
+                        {
+                            client = Some(lcu);
+                        }
+                    }
+                }
+            } else {
+                client = None;
+            }
+            let ready = if let Some(lcu) = client.as_ref() {
+                runtime
+                    .block_on(lcu.ready_check())
+                    .ok()
+                    .flatten()
+                    .and_then(|payload| league_ready_hotkeys::lcu::parse_ready_check(&payload).ok())
+                    .map(|state| state.active)
+                    .unwrap_or(false)
+            } else {
+                false
+            };
+            if ready != active {
+                active = ready;
+                let _ = hotkeys.set_enabled(active);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    let _ = hotkeys.set_enabled(false);
+    tray.remove();
+    unsafe {
+        let _ = DestroyWindow(owner);
+    }
+    println!("background utility stopped");
+}
+
+#[cfg(windows)]
+fn tray_icon_path() -> std::path::PathBuf {
+    let relative = std::path::Path::new("assets\\tray-icon.ico");
+    let mut candidates = vec![relative.to_path_buf()];
+    if let Ok(executable) = std::env::current_exe() {
+        if let Some(bin_dir) = executable.parent() {
+            candidates.push(bin_dir.join(relative));
+            if let Some(project_dir) = bin_dir.parent().and_then(|p| p.parent()) {
+                candidates.push(project_dir.join(relative));
+            }
+        }
+    }
+    candidates
+        .into_iter()
+        .find(|path| path.is_file())
+        .unwrap_or_else(|| relative.to_path_buf())
 }
 
 #[cfg(windows)]
@@ -212,7 +385,11 @@ fn run_tray_diagnostic() {
                     "tray callback received: event={} expected={}",
                     message.lParam.0, WM_RBUTTONUP
                 );
-                if message.lParam.0 as u32 == WM_RBUTTONUP && tray.show_menu() {
+                if message.lParam.0 as u32 == WM_RBUTTONUP
+                    && tray.show_menu(
+                        league_ready_hotkeys::windows::startup::is_enabled().unwrap_or(false),
+                    ) == league_ready_hotkeys::windows::tray::MENU_EXIT
+                {
                     break 'tray;
                 }
             }
@@ -231,6 +408,10 @@ static TRAY_EXIT_REQUESTED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
 #[cfg(windows)]
+static STARTUP_TOGGLE_REQUESTED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(windows)]
 unsafe extern "system" fn tray_wnd_proc(
     hwnd: windows::Win32::Foundation::HWND,
     message: u32,
@@ -244,10 +425,16 @@ unsafe extern "system" fn tray_wnd_proc(
             wparam,
             lparam,
         );
-    } else if message == windows::Win32::UI::WindowsAndMessaging::WM_COMMAND
-        && (wparam.0 & 0xffff) as u32 == league_ready_hotkeys::windows::tray::MENU_EXIT
-    {
-        TRAY_EXIT_REQUESTED.store(true, std::sync::atomic::Ordering::Release);
+    } else if message == windows::Win32::UI::WindowsAndMessaging::WM_COMMAND {
+        match (wparam.0 & 0xffff) as u32 {
+            league_ready_hotkeys::windows::tray::MENU_EXIT => {
+                TRAY_EXIT_REQUESTED.store(true, std::sync::atomic::Ordering::Release);
+            }
+            league_ready_hotkeys::windows::tray::MENU_STARTUP => {
+                STARTUP_TOGGLE_REQUESTED.store(true, std::sync::atomic::Ordering::Release);
+            }
+            _ => {}
+        }
     }
     windows::Win32::UI::WindowsAndMessaging::DefWindowProcW(hwnd, message, wparam, lparam)
 }
