@@ -16,3 +16,4 @@
 | Normal launch and ready-check prompt | 5 | LRH-009–LRH-010 | LRH-009 validated: no-argument launch, tray Exit, startup checkmark/toggle, menu ordering, and separator work; notification remains for LRH-010 |
 | Notification actions | 5 | LRH-011 | live background validation succeeded: clicking Decline printed the diagnostic and declined the real ready check |
 | Notification preference persistence | 3 | LRH-012 | user confirmed the Notifications checkmark and persistence after restart |
+| Shortcut customization | 5 | LRH-013 | planned; F1/F2 remain the current defaults |
