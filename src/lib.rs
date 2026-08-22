@@ -1,4 +1,5 @@
 pub mod app;
+pub mod reconnect;
 pub mod lcu;
 #[cfg(windows)]
 pub mod windows;

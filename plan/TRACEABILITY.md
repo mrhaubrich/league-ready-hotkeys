@@ -11,3 +11,4 @@
 | No accidental in-game capture | 2/3 | LRH-004, LRH-007 | hotkey lifecycle tests and manual Windows scenario |
 | Starts with Windows | 3 | LRH-006 | `src/windows/startup.rs`, registry manual check |
 | Low idle usage | 4 | LRH-007/008 | reconnect tests and measured release footprint |
+| Reconnect and shutdown | 3 | LRH-007 | `--watch-ready-check` connected to the live client; `--check-tray` removed the icon and exited cleanly |

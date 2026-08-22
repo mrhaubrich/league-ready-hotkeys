@@ -50,7 +50,7 @@ fn main() {
         let client = league_ready_hotkeys::lcu::transport::LcuClient::new(&credentials)
             .map_err(|error| error.to_string())?;
         if mode == Some("--watch-ready-check") {
-            let event = client.next_ready_check_event().await.map_err(|error| error.to_string())?;
+            let event = client.next_ready_check_event_with_retry(5).await.map_err(|error| error.to_string())?;
             return Ok(Some(serde_json::json!({"active": event.active, "response": format!("{:?}", event.response)})));
         }
         let ready = client.ready_check().await.map_err(|error| error.to_string())?;

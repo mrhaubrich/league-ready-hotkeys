@@ -1,11 +1,18 @@
 use thiserror::Error;
+use std::fmt;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct LcuCredentials {
     pub port: u16,
     pub password: String,
     pub protocol: String,
+}
+
+impl fmt::Debug for LcuCredentials {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("LcuCredentials").field("port", &self.port).field("password", &"[REDACTED]").field("protocol", &self.protocol).finish()
+    }
 }
 
 impl LcuCredentials {
@@ -82,5 +89,13 @@ mod tests {
             parse_lockfile("x:1:2:p:http"),
             Err(LockfileError::InvalidProtocol)
         );
+    }
+
+    #[test]
+    fn debug_output_redacts_password() {
+        let credentials = parse_lockfile("x:1:2:super-secret:https").unwrap();
+        let debug = format!("{credentials:?}");
+        assert!(!debug.contains("super-secret"));
+        assert!(debug.contains("REDACTED"));
     }
 }

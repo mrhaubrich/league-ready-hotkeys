@@ -7,6 +7,7 @@ use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::{connect_async_tls_with_config, tungstenite::{client::IntoClientRequest, Message}, Connector};
 
 use super::{parse_ready_check_event, LcuCredentials, ReadyCheck, ACCEPT, DECLINE, READY_CHECK};
+use crate::reconnect::ReconnectPolicy;
 
 #[derive(Debug, Error)]
 pub enum TransportError {
@@ -97,6 +98,22 @@ impl LcuClient {
             }
         }
         Err(TransportError::WebSocket(Box::new(tokio_tungstenite::tungstenite::Error::ConnectionClosed)))
+    }
+
+    pub async fn next_ready_check_event_with_retry(&self, attempts: u32) -> Result<ReadyCheck, TransportError> {
+        let policy = ReconnectPolicy::default();
+        let mut attempt = 0;
+        loop {
+            match self.next_ready_check_event().await {
+                Ok(event) => return Ok(event),
+                Err(error) if attempt < attempts => {
+                    tokio::time::sleep(policy.delay(attempt)).await;
+                    attempt += 1;
+                    let _ = &error;
+                }
+                Err(error) => return Err(error),
+            }
+        }
     }
 
     async fn action(&self, path: &str) -> Result<(), TransportError> {
