@@ -1,5 +1,6 @@
 #![cfg(windows)]
 
+use std::sync::atomic::{AtomicU32, Ordering};
 use windows::core::Result;
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
@@ -19,6 +20,14 @@ use windows::Win32::UI::WindowsAndMessaging::{LoadCursorW, SetCursor, IDC_ARROW,
 
 const WIDTH: i32 = 360;
 const HEIGHT: i32 = 150;
+pub const ACTION_NONE: u32 = 0;
+pub const ACTION_ACCEPT: u32 = 1;
+pub const ACTION_DECLINE: u32 = 2;
+static ACTION_REQUEST: AtomicU32 = AtomicU32::new(ACTION_NONE);
+
+pub fn take_action() -> u32 {
+    ACTION_REQUEST.swap(ACTION_NONE, Ordering::AcqRel)
+}
 
 pub struct ReadyCheckNotification {
     hwnd: HWND,
@@ -239,8 +248,10 @@ unsafe extern "system" fn notification_proc(
         let y = ((lparam.0 >> 16) & 0xffff) as i16 as i32;
         if (22..=168).contains(&x) && (92..=132).contains(&y) {
             println!("notification button clicked: accept");
+            ACTION_REQUEST.store(ACTION_ACCEPT, Ordering::Release);
         } else if (182..=338).contains(&x) && (92..=132).contains(&y) {
             println!("notification button clicked: decline");
+            ACTION_REQUEST.store(ACTION_DECLINE, Ordering::Release);
         } else {
             println!("notification click outside buttons: x={x} y={y}");
         }

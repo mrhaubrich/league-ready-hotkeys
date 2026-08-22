@@ -40,7 +40,7 @@ Validation: add a `--check-notification` diagnostic and manual multi-monitor, ta
 
 Priority: MUST. Dependencies: LRH-010. Status: Locked.
 
-Wire buttons to the existing action gate and LCU endpoints. Revalidate ready-check state immediately before sending, disable both buttons while a request is in flight, and display a short success/error state without exposing credentials.
+Wire buttons to the existing action gate and LCU endpoints. Revalidate ready-check state immediately before sending, disable both buttons while a request is in flight, and display a short success/error state without exposing credentials. Live validation is complete: the Decline button successfully acted on a real ready check.
 
 Acceptance: clicking Accept calls only the accept endpoint, clicking Decline calls only the decline endpoint, duplicate clicks are suppressed, and stale prompts cannot send actions.
 

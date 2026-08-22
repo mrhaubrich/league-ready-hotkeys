@@ -14,3 +14,4 @@
 | Reconnect and shutdown | 3 | LRH-007 | `--watch-ready-check` connected to the live client; `--check-tray` removed the icon and exited cleanly |
 | Portable release | 4 | LRH-008 | release validation script passed; tray runtime and idle CPU/working-set measurements were acceptable |
 | Normal launch and ready-check prompt | 5 | LRH-009–LRH-010 | LRH-009 validated: no-argument launch, tray Exit, startup checkmark/toggle, menu ordering, and separator work; notification remains for LRH-010 |
+| Notification actions | 5 | LRH-011 | live background validation succeeded: clicking Decline printed the diagnostic and declined the real ready check |

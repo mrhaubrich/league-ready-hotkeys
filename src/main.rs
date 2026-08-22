@@ -242,6 +242,24 @@ fn run_background() {
                 DispatchMessageW(&message);
             }
         }
+        let requested = league_ready_hotkeys::windows::notification::take_action();
+        if active && requested != league_ready_hotkeys::windows::notification::ACTION_NONE {
+            if let Some(lcu) = client.as_ref() {
+                let result = runtime.block_on(async {
+                    if requested == league_ready_hotkeys::windows::notification::ACTION_ACCEPT {
+                        lcu.accept().await
+                    } else {
+                        lcu.decline().await
+                    }
+                });
+                if let Err(error) = result {
+                    eprintln!("notification action failed: {error}");
+                }
+                active = false;
+                let _ = hotkeys.set_enabled(false);
+                notification.set_active(false);
+            }
+        }
         if Instant::now() >= next_poll {
             next_poll = Instant::now() + Duration::from_secs(2);
             if let Ok(path) = league_ready_hotkeys::lcu::discover_lockfile() {
