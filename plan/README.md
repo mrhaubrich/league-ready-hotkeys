@@ -17,7 +17,7 @@ Selection rule: choose the highest-RICE unblocked task in the active phase; depe
 | LRH-009 | Add default always-running background mode | MUST | Complete | LRH-008 |
 | LRH-010 | Add bottom-right ready-check notification window | MUST | Planned | LRH-009 |
 | LRH-011 | Add notification Accept/Decline buttons | MUST | Complete | LRH-010 |
-| LRH-012 | Add UI/tray status and notification preferences | SHOULD | Validation-required | LRH-010 |
+| LRH-012 | Add UI/tray status and notification preferences | SHOULD | Complete | LRH-010 |
 
 Locked tasks require a concrete dependency completion and recorded validation evidence. Handoffs include changed files, tests run, failures, assumptions, and plan status updates.
 
