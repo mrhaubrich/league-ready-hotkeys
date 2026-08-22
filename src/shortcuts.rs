@@ -1,3 +1,4 @@
+use crate::app::HotkeyAction;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,6 +21,36 @@ pub enum ShortcutKey {
 pub struct ShortcutBinding {
     pub modifiers: Vec<String>,
     pub input: String,
+}
+
+pub struct ShortcutBindings {
+    pub accept: ShortcutBinding,
+    pub decline: ShortcutBinding,
+}
+
+impl ShortcutBindings {
+    pub fn action_for_keyboard(
+        &self,
+        virtual_key: u32,
+        modifiers: &[&str],
+    ) -> Option<HotkeyAction> {
+        if self.accept.matches_keyboard(virtual_key, modifiers) {
+            Some(HotkeyAction::Accept)
+        } else if self.decline.matches_keyboard(virtual_key, modifiers) {
+            Some(HotkeyAction::Decline)
+        } else {
+            None
+        }
+    }
+    pub fn action_for_mouse(&self, button: &str) -> Option<HotkeyAction> {
+        if self.accept.matches_mouse(button) {
+            Some(HotkeyAction::Accept)
+        } else if self.decline.matches_mouse(button) {
+            Some(HotkeyAction::Decline)
+        } else {
+            None
+        }
+    }
 }
 
 impl ShortcutBinding {
@@ -51,6 +82,23 @@ impl ShortcutBinding {
             return Err(ShortcutError::Unsupported(value.to_owned()));
         }
         Ok(Self { modifiers, input })
+    }
+
+    pub fn matches_keyboard(&self, virtual_key: u32, modifiers: &[&str]) -> bool {
+        if self.input.len() != 1 {
+            return false;
+        }
+        let expected = self.input.as_bytes()[0] as u32;
+        expected == virtual_key
+            && self.modifiers.iter().all(|modifier| {
+                modifiers
+                    .iter()
+                    .any(|value| value.eq_ignore_ascii_case(modifier))
+            })
+    }
+
+    pub fn matches_mouse(&self, button: &str) -> bool {
+        self.input.eq_ignore_ascii_case(button)
     }
 }
 
@@ -154,5 +202,28 @@ mod tests {
     fn parses_keyboard_combo_and_mouse_button() {
         assert_eq!(ShortcutBinding::parse("Ctrl+Shift+A").unwrap().input, "A");
         assert_eq!(ShortcutBinding::parse("Mouse4").unwrap().input, "MOUSE4");
+    }
+    #[test]
+    fn matches_keyboard_and_mouse_events() {
+        let key = ShortcutBinding::parse("Ctrl+Shift+C").unwrap();
+        assert!(key.matches_keyboard('C' as u32, &["ctrl", "shift"]));
+        assert!(!key.matches_keyboard('C' as u32, &["ctrl"]));
+        let mouse = ShortcutBinding::parse("Mouse4").unwrap();
+        assert!(mouse.matches_mouse("mouse4"));
+    }
+    #[test]
+    fn maps_events_to_distinct_actions() {
+        let bindings = ShortcutBindings {
+            accept: ShortcutBinding::parse("Ctrl+C").unwrap(),
+            decline: ShortcutBinding::parse("Mouse4").unwrap(),
+        };
+        assert_eq!(
+            bindings.action_for_keyboard('C' as u32, &["ctrl"]),
+            Some(HotkeyAction::Accept)
+        );
+        assert_eq!(
+            bindings.action_for_mouse("Mouse4"),
+            Some(HotkeyAction::Decline)
+        );
     }
 }

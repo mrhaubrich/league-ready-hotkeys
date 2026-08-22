@@ -30,6 +30,10 @@ Notification rendering can be validated without entering a queue with `--check-n
 
 Shortcut configuration can be inspected with `--check-shortcuts` and changed with `--set-shortcuts F3 F4`. F1/F2 remain the defaults until another pair is saved; duplicate or unsupported keys are rejected.
 
+Arbitrary binding syntax can be validated with `--check-binding Ctrl+Shift+A`, `--check-binding Alt+R`, or `--check-binding Mouse4`.
+
+Low-level keyboard and mouse input hooks can be validated with `--check-input-hook`; press keys and mouse buttons during its 30-second diagnostic window.
+
 Launching the executable without arguments now starts the background utility. It discovers League every two seconds, polls the ready-check state, and registers F1/F2 only while an unanswered ready check is active. Use the tray menu to exit.
 
 ## Release validation

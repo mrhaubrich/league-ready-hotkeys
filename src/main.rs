@@ -41,6 +41,24 @@ fn main() {
         );
         return;
     }
+    if mode == Some("--check-binding") {
+        let value = args.get(2).map(String::as_str).unwrap_or_default();
+        match league_ready_hotkeys::shortcuts::ShortcutBinding::parse(value) {
+            Ok(binding) => println!(
+                "valid binding: modifiers={:?} input={}",
+                binding.modifiers, binding.input
+            ),
+            Err(error) => {
+                eprintln!("invalid binding: {error}");
+                std::process::exit(2);
+            }
+        }
+        return;
+    }
+    if mode == Some("--check-input-hook") {
+        league_ready_hotkeys::windows::input_hooks::run_diagnostic();
+        return;
+    }
     if matches!(
         mode,
         Some("--check-startup") | Some("--enable-startup") | Some("--disable-startup")
