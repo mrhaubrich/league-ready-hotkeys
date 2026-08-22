@@ -16,6 +16,44 @@ pub enum ShortcutKey {
     F12,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShortcutBinding {
+    pub modifiers: Vec<String>,
+    pub input: String,
+}
+
+impl ShortcutBinding {
+    pub fn parse(value: &str) -> Result<Self, ShortcutError> {
+        let parts: Vec<_> = value
+            .split('+')
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+            .collect();
+        if parts.is_empty() {
+            return Err(ShortcutError::Unsupported(value.to_owned()));
+        }
+        let input = parts.last().unwrap().to_ascii_uppercase();
+        let mut modifiers = Vec::new();
+        for modifier in &parts[..parts.len() - 1] {
+            let normalized = modifier.to_ascii_lowercase();
+            if !matches!(normalized.as_str(), "ctrl" | "alt" | "shift" | "win") {
+                return Err(ShortcutError::Unsupported(value.to_owned()));
+            }
+            if modifiers.contains(&normalized) {
+                return Err(ShortcutError::Duplicate);
+            }
+            modifiers.push(normalized);
+        }
+        let valid_input = input.starts_with('F') && input[1..].parse::<u8>().is_ok()
+            || input.starts_with("MOUSE")
+            || input.len() == 1 && input.chars().next().unwrap().is_ascii_alphanumeric();
+        if !valid_input {
+            return Err(ShortcutError::Unsupported(value.to_owned()));
+        }
+        Ok(Self { modifiers, input })
+    }
+}
+
 impl ShortcutKey {
     pub const fn virtual_key(self) -> u32 {
         match self {
@@ -111,5 +149,10 @@ mod tests {
             ShortcutKey::parse("A"),
             Err(ShortcutError::Unsupported(_))
         ));
+    }
+    #[test]
+    fn parses_keyboard_combo_and_mouse_button() {
+        assert_eq!(ShortcutBinding::parse("Ctrl+Shift+A").unwrap().input, "A");
+        assert_eq!(ShortcutBinding::parse("Mouse4").unwrap().input, "MOUSE4");
     }
 }
