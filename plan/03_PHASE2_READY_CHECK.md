@@ -1,3 +1,3 @@
 # Phase 2 — Ready check
 
-Objective: translate LCU ready-check events into conditional F1/F2 commands. Entry: authenticated transport evidence. Exit: active/inactive transitions, endpoint routing, duplicate suppression, and hotkey cleanup pass tests. Tasks LRH-003–005 are dependency-locked. Exclusion: startup registration.
+Objective: translate LCU ready-check events into conditional F1/F2 commands. Entry: authenticated transport evidence. LRH-003 now has deterministic sanitized event evidence; live transport validation remains required before completion. Exit: active/inactive transitions, endpoint routing, duplicate suppression, and hotkey cleanup pass tests. Tasks LRH-004–005 remain dependency-locked. Exclusion: startup registration.
