@@ -6,6 +6,10 @@ fn main() {
         run_hotkey_diagnostic();
         return;
     }
+    if mode == Some("--check-tray") {
+        run_tray_diagnostic();
+        return;
+    }
     if matches!(mode, Some("--check-startup") | Some("--enable-startup") | Some("--disable-startup")) {
         let executable = std::env::current_exe().expect("current executable path");
         let result = match mode {
@@ -94,6 +98,25 @@ fn run_hotkey_diagnostic() {
         std::thread::sleep(Duration::from_millis(25));
     }
     println!("F1/F2 diagnostic complete; bindings released");
+}
+
+#[cfg(windows)]
+fn run_tray_diagnostic() {
+    use std::time::Duration;
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    let owner = unsafe { GetForegroundWindow() };
+    if owner.0.is_null() { eprintln!("could not obtain a tray owner window"); std::process::exit(1); }
+    let icon_path = std::path::Path::new("assets\\tray-icon.ico");
+    let mut tray = league_ready_hotkeys::windows::tray::TrayIcon::with_icon(owner, icon_path)
+        .unwrap_or_else(|error| { eprintln!("could not load tray icon: {error}"); std::process::exit(1); });
+    if !tray.add() {
+        eprintln!("could not add tray icon");
+        std::process::exit(1);
+    }
+    println!("tray icon active for 30 seconds");
+    std::thread::sleep(Duration::from_secs(30));
+    tray.remove();
+    println!("tray icon removed");
 }
 
 #[cfg(not(windows))]

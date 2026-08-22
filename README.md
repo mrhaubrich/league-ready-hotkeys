@@ -23,3 +23,5 @@ To validate global key registration independently, run `league-ready-hotkeys.exe
 To validate endpoint routing explicitly, run `league-ready-hotkeys.exe --check-action accept` or `league-ready-hotkeys.exe --check-action decline` while a ready check is visible. The command refuses to send anything unless the live ready-check payload is active; each invocation is an explicit user action.
 
 Startup registration can be validated with `--enable-startup`, `--check-startup`, and `--disable-startup`. These commands use only the current user's `HKCU` Run key and require no administrator rights.
+
+Tray lifecycle can be validated with `--check-tray`; it adds the native tray icon for 30 seconds and removes it on exit.
