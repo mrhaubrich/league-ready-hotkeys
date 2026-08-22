@@ -106,6 +106,81 @@ pub fn is_dark_mode() -> bool {
     status.0 == 0 && value == 0
 }
 
+pub fn notifications_enabled() -> Result<bool> {
+    let mut handle = windows::Win32::System::Registry::HKEY::default();
+    let status = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            w!("Software\\LeagueReadyHotkeys"),
+            0,
+            None,
+            REG_OPTION_NON_VOLATILE,
+            KEY_QUERY_VALUE | KEY_SET_VALUE,
+            None,
+            &mut handle,
+            None,
+        )
+    };
+    if status.0 != 0 {
+        return Err(Error::from_win32());
+    }
+    let mut value = 1u32;
+    let mut size = 4u32;
+    let read = unsafe {
+        RegGetValueW(
+            handle,
+            None,
+            w!("NotificationsEnabled"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some((&mut value as *mut u32).cast()),
+            Some(&mut size),
+        )
+    };
+    unsafe {
+        let _ = RegCloseKey(handle);
+    }
+    Ok(read.0 != 0 || value != 0)
+}
+
+pub fn set_notifications_enabled(enabled: bool) -> Result<()> {
+    let mut handle = windows::Win32::System::Registry::HKEY::default();
+    let status = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            w!("Software\\LeagueReadyHotkeys"),
+            0,
+            None,
+            REG_OPTION_NON_VOLATILE,
+            KEY_QUERY_VALUE | KEY_SET_VALUE,
+            None,
+            &mut handle,
+            None,
+        )
+    };
+    if status.0 != 0 {
+        return Err(Error::from_win32());
+    }
+    let value = if enabled { 1u32 } else { 0u32 };
+    let result = unsafe {
+        RegSetValueExW(
+            handle,
+            w!("NotificationsEnabled"),
+            0,
+            windows::Win32::System::Registry::REG_DWORD,
+            Some(&value.to_ne_bytes()),
+        )
+    };
+    unsafe {
+        let _ = RegCloseKey(handle);
+    }
+    if result.0 != 0 {
+        Err(Error::from_win32())
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

@@ -15,6 +15,7 @@ pub const TRAY_ID: u32 = 1;
 pub const TRAY_MESSAGE: u32 = WM_USER + 1;
 pub const MENU_EXIT: u32 = 1;
 pub const MENU_STARTUP: u32 = 2;
+pub const MENU_NOTIFICATIONS: u32 = 3;
 
 pub struct TrayIcon {
     data: NOTIFYICONDATAW,
@@ -85,7 +86,7 @@ impl TrayIcon {
         }
     }
 
-    pub fn show_menu(&self, startup_enabled: bool) -> u32 {
+    pub fn show_menu(&self, startup_enabled: bool, notifications_enabled: bool) -> u32 {
         let menu = unsafe { CreatePopupMenu().expect("create tray menu") };
         unsafe {
             let flags = if startup_enabled {
@@ -100,6 +101,17 @@ impl TrayIcon {
                 windows::core::w!("Start with Windows"),
             );
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
+            let flags = if notifications_enabled {
+                MF_STRING | MF_CHECKED
+            } else {
+                MF_STRING
+            };
+            let _ = AppendMenuW(
+                menu,
+                flags,
+                MENU_NOTIFICATIONS as usize,
+                windows::core::w!("Notifications"),
+            );
             let _ = AppendMenuW(
                 menu,
                 MF_STRING,

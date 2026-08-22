@@ -196,7 +196,10 @@ fn run_background() {
             if message.message == WM_APP + 1 && message.lParam.0 as u32 == WM_RBUTTONUP {
                 let startup_enabled =
                     league_ready_hotkeys::windows::startup::is_enabled().unwrap_or(false);
-                let command = tray.show_menu(startup_enabled);
+                let command = tray.show_menu(
+                    startup_enabled,
+                    league_ready_hotkeys::windows::startup::notifications_enabled().unwrap_or(true),
+                );
                 if command == league_ready_hotkeys::windows::tray::MENU_EXIT
                     || TRAY_EXIT_REQUESTED.swap(false, std::sync::atomic::Ordering::AcqRel)
                 {
@@ -209,6 +212,15 @@ fn run_background() {
                         let executable = std::env::current_exe().expect("current executable path");
                         let _ = league_ready_hotkeys::windows::startup::set_enabled(
                             &executable,
+                            !enabled,
+                        );
+                    }
+                }
+                if command == league_ready_hotkeys::windows::tray::MENU_NOTIFICATIONS {
+                    if let Ok(enabled) =
+                        league_ready_hotkeys::windows::startup::notifications_enabled()
+                    {
+                        let _ = league_ready_hotkeys::windows::startup::set_notifications_enabled(
                             !enabled,
                         );
                     }
@@ -289,7 +301,11 @@ fn run_background() {
             if ready != active {
                 active = ready;
                 let _ = hotkeys.set_enabled(active);
-                notification.set_active(active);
+                notification.set_active(
+                    active
+                        && league_ready_hotkeys::windows::startup::notifications_enabled()
+                            .unwrap_or(true),
+                );
             }
         }
         std::thread::sleep(Duration::from_millis(25));
@@ -486,6 +502,8 @@ fn run_tray_diagnostic() {
                 if message.lParam.0 as u32 == WM_RBUTTONUP
                     && tray.show_menu(
                         league_ready_hotkeys::windows::startup::is_enabled().unwrap_or(false),
+                        league_ready_hotkeys::windows::startup::notifications_enabled()
+                            .unwrap_or(true),
                     ) == league_ready_hotkeys::windows::tray::MENU_EXIT
                 {
                     break 'tray;
