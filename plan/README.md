@@ -8,7 +8,7 @@ Selection rule: choose the highest-RICE unblocked task in the active phase; depe
 |---|---|---|---|---|
 | LRH-001 | Bootstrap repository and Rust application | MUST | Complete | — |
 | LRH-002 | Discover and authenticate to LCU securely | MUST | Complete | LRH-001 |
-| LRH-003 | Consume and model ready-check state | MUST | Validation-required | LRH-002 |
+| LRH-003 | Consume and model ready-check state | MUST | Complete | LRH-002 |
 | LRH-004 | Implement conditional Windows hotkeys | MUST | Locked | LRH-001, LRH-003 |
 | LRH-005 | Implement accept/decline commands | MUST | Locked | LRH-002–004 |
 | LRH-006 | Add tray lifecycle and startup toggle | SHOULD | Locked | LRH-005 |
