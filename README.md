@@ -28,6 +28,8 @@ Tray lifecycle can be validated with `--check-tray`; it adds the native tray ico
 
 Notification rendering can be validated without entering a queue with `--check-notification`; it displays the bottom-right prompt for 30 seconds.
 
+Shortcut configuration can be inspected with `--check-shortcuts` and changed with `--set-shortcuts F3 F4`. F1/F2 remain the defaults until another pair is saved; duplicate or unsupported keys are rejected.
+
 Launching the executable without arguments now starts the background utility. It discovers League every two seconds, polls the ready-check state, and registers F1/F2 only while an unanswered ready check is active. Use the tray menu to exit.
 
 ## Release validation

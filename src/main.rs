@@ -14,6 +14,33 @@ fn main() {
         run_notification_diagnostic();
         return;
     }
+    if mode == Some("--check-shortcuts") {
+        let config = league_ready_hotkeys::windows::startup::load_shortcuts();
+        println!(
+            "shortcuts: accept={:?} decline={:?}",
+            config.accept, config.decline
+        );
+        return;
+    }
+    if mode == Some("--set-shortcuts") {
+        let config = league_ready_hotkeys::shortcuts::ShortcutConfig::parse(
+            args.get(2).map(String::as_str).unwrap_or_default(),
+            args.get(3).map(String::as_str).unwrap_or_default(),
+        )
+        .unwrap_or_else(|error| {
+            eprintln!("invalid shortcuts: {error}");
+            std::process::exit(2);
+        });
+        if let Err(error) = league_ready_hotkeys::windows::startup::save_shortcuts(config) {
+            eprintln!("could not save shortcuts: {error}");
+            std::process::exit(1);
+        }
+        println!(
+            "shortcuts saved: accept={:?} decline={:?}",
+            config.accept, config.decline
+        );
+        return;
+    }
     if matches!(
         mode,
         Some("--check-startup") | Some("--enable-startup") | Some("--disable-startup")
@@ -172,6 +199,7 @@ fn run_background() {
         std::process::exit(1);
     }
     let mut hotkeys = league_ready_hotkeys::windows::hotkeys::HotkeyManager::new(owner);
+    let shortcut_config = league_ready_hotkeys::windows::startup::load_shortcuts();
     let notification =
         league_ready_hotkeys::windows::notification::ReadyCheckNotification::new(owner)
             .unwrap_or_else(|error| {
@@ -300,7 +328,7 @@ fn run_background() {
             };
             if ready != active {
                 active = ready;
-                let _ = hotkeys.set_enabled(active);
+                let _ = hotkeys.set_enabled_with_config(active, shortcut_config);
                 notification.set_active(
                     active
                         && league_ready_hotkeys::windows::startup::notifications_enabled()

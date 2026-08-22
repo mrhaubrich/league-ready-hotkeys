@@ -1,10 +1,9 @@
 #![cfg(windows)]
 
+use crate::shortcuts::ShortcutConfig;
 use windows::core::Result;
 use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::Input::KeyboardAndMouse::{
-    RegisterHotKey, UnregisterHotKey, MOD_NOREPEAT, VK_F1, VK_F2,
-};
+use windows::Win32::UI::Input::KeyboardAndMouse::{RegisterHotKey, UnregisterHotKey, MOD_NOREPEAT};
 
 pub const ACCEPT_HOTKEY_ID: i32 = 1;
 pub const DECLINE_HOTKEY_ID: i32 = 2;
@@ -23,15 +22,29 @@ impl HotkeyManager {
     }
 
     pub fn set_enabled(&mut self, enabled: bool) -> Result<()> {
+        self.set_enabled_with_config(enabled, ShortcutConfig::default())
+    }
+
+    pub fn set_enabled_with_config(&mut self, enabled: bool, config: ShortcutConfig) -> Result<()> {
         if enabled == self.enabled {
             return Ok(());
         }
         if enabled {
             unsafe {
-                RegisterHotKey(self.hwnd, ACCEPT_HOTKEY_ID, MOD_NOREPEAT, VK_F1.0 as u32)?;
+                RegisterHotKey(
+                    self.hwnd,
+                    ACCEPT_HOTKEY_ID,
+                    MOD_NOREPEAT,
+                    config.accept.virtual_key(),
+                )?;
             }
             if let Err(error) = unsafe {
-                RegisterHotKey(self.hwnd, DECLINE_HOTKEY_ID, MOD_NOREPEAT, VK_F2.0 as u32)
+                RegisterHotKey(
+                    self.hwnd,
+                    DECLINE_HOTKEY_ID,
+                    MOD_NOREPEAT,
+                    config.decline.virtual_key(),
+                )
             } {
                 unsafe {
                     let _ = UnregisterHotKey(self.hwnd, ACCEPT_HOTKEY_ID);
