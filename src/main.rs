@@ -6,11 +6,17 @@ fn main() {
         run_hotkey_diagnostic();
         return;
     }
-    if !matches!(mode, Some("--check-lockfile") | Some("--watch-ready-check")) {
-        println!("use --check-lockfile or --watch-ready-check");
+    if !matches!(mode, Some("--check-lockfile") | Some("--watch-ready-check") | Some("--check-action")) {
+        println!("use --check-lockfile, --watch-ready-check, or --check-action accept|decline");
         return;
     }
-    let path = args.get(2).cloned().or_else(|| league_ready_hotkeys::lcu::discover_lockfile().ok().map(|path| path.to_string_lossy().into_owned()));
+    let action = if mode == Some("--check-action") { args.get(2).map(String::as_str) } else { None };
+    if mode == Some("--check-action") && !matches!(action, Some("accept") | Some("decline")) {
+        eprintln!("usage: --check-action accept|decline");
+        std::process::exit(2);
+    }
+    let path_arg = if action.is_some() { args.get(3) } else { args.get(2) };
+    let path = path_arg.cloned().or_else(|| league_ready_hotkeys::lcu::discover_lockfile().ok().map(|path| path.to_string_lossy().into_owned()));
     let Some(path) = path else {
         eprintln!("LeagueClientUx.exe is not running or its lockfile is unavailable");
         std::process::exit(1);
@@ -32,9 +38,19 @@ fn main() {
             let event = client.next_ready_check_event().await.map_err(|error| error.to_string())?;
             return Ok(Some(serde_json::json!({"active": event.active, "response": format!("{:?}", event.response)})));
         }
-        client.ready_check().await.map_err(|error| error.to_string())
+        let ready = client.ready_check().await.map_err(|error| error.to_string())?;
+        if let Some(action) = action {
+            let payload = ready.ok_or_else(|| "no active ready check".to_owned())?;
+            let state = league_ready_hotkeys::lcu::parse_ready_check(&payload).map_err(|error| error.to_string())?;
+            if !state.active { return Err("ready check is not active or already answered".to_owned()); }
+            match action { "accept" => client.accept().await, "decline" => client.decline().await, _ => unreachable!() }
+                .map_err(|error| error.to_string())?;
+            return Ok(Some(serde_json::json!({"action": action, "sent": true})));
+        }
+        Ok(ready)
     });
     match result {
+        Ok(Some(payload)) if action.is_some() => println!("LCU action sent successfully: {payload}"),
         Ok(Some(payload)) => println!("LCU reachable; ready-check response: {payload}"),
         Ok(None) => println!("LCU reachable; no active ready check (HTTP 404)"),
         Err(error) => { eprintln!("LCU request failed: {error}"); std::process::exit(1); }

@@ -19,3 +19,5 @@ For a real read-only connection check, run `league-ready-hotkeys.exe --check-loc
 To validate live ready-check events, run `league-ready-hotkeys.exe --watch-ready-check` before queueing. It waits for the LCU event and prints the sanitized active/response state when a ready check appears.
 
 To validate global key registration independently, run `league-ready-hotkeys.exe --check-hotkeys`, press F1 and F2 during the 30-second window, and confirm it prints the corresponding binding. The command temporarily captures both keys globally and releases them when it exits.
+
+To validate endpoint routing explicitly, run `league-ready-hotkeys.exe --check-action accept` or `league-ready-hotkeys.exe --check-action decline` while a ready check is visible. The command refuses to send anything unless the live ready-check payload is active; each invocation is an explicit user action.
