@@ -1,6 +1,6 @@
 # Delivery plan
 
-Active phase: Phase 4 — Release.
+Active phase: Phase 5 — Background mode and ready-check UI.
 
 Selection rule: choose the highest-RICE unblocked task in the active phase; dependencies, security gates, and human decisions always take precedence.
 
@@ -14,6 +14,10 @@ Selection rule: choose the highest-RICE unblocked task in the active phase; depe
 | LRH-006 | Add tray lifecycle and startup toggle | SHOULD | Complete | LRH-005 |
 | LRH-007 | Harden reconnect, shutdown, and secrets | MUST | Complete | LRH-006 |
 | LRH-008 | Validate and package portable release | MUST | Complete | LRH-007 |
+| LRH-009 | Add default always-running background mode | MUST | Planned | LRH-008 |
+| LRH-010 | Add bottom-right ready-check notification window | MUST | Planned | LRH-009 |
+| LRH-011 | Add notification Accept/Decline buttons | MUST | Locked | LRH-010 |
+| LRH-012 | Add UI/tray status and notification preferences | SHOULD | Locked | LRH-010 |
 
 Locked tasks require a concrete dependency completion and recorded validation evidence. Handoffs include changed files, tests run, failures, assumptions, and plan status updates.
 
@@ -28,3 +32,5 @@ Every task must provide all five items before it may be marked `Complete`:
 5. Recorded evidence in this plan and `TRACEABILITY.md`, including failures and remaining limitations.
 
 Compilation alone never satisfies the gate. A task remains `Validation-required` until the user-run scenario has been completed or the task has an explicitly documented, reproducible substitute.
+
+Phase 5 selection: LRH-009 first, then LRH-010. LRH-011 and LRH-012 remain locked until the notification window is integrated and tested.

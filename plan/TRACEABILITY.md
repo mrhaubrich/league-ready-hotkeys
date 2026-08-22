@@ -13,3 +13,4 @@
 | Low idle usage | 4 | LRH-007/008 | reconnect tests and measured release footprint |
 | Reconnect and shutdown | 3 | LRH-007 | `--watch-ready-check` connected to the live client; `--check-tray` removed the icon and exited cleanly |
 | Portable release | 4 | LRH-008 | release validation script passed; tray runtime and idle CPU/working-set measurements were acceptable |
+| Normal launch and ready-check prompt | 5 | LRH-009–LRH-010 | planned; no-argument background orchestration and bottom-right notification remain to be implemented |
