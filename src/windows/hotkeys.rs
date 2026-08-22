@@ -40,3 +40,21 @@ impl HotkeyManager {
 impl Drop for HotkeyManager {
     fn drop(&mut self) { let _ = self.set_enabled(false); }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn starts_disabled_and_can_remain_disabled() {
+        let mut manager = HotkeyManager::new(HWND(std::ptr::null_mut()));
+        assert!(!manager.is_enabled());
+        manager.set_enabled(false).expect("disabled is idempotent");
+        assert!(!manager.is_enabled());
+    }
+
+    #[test]
+    fn uses_distinct_command_ids() {
+        assert_ne!(ACCEPT_HOTKEY_ID, DECLINE_HOTKEY_ID);
+    }
+}

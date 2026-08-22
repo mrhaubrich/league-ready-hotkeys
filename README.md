@@ -17,3 +17,5 @@ The current foundation parses an LCU lockfile and provides the Windows-only auth
 For a real read-only connection check, run `league-ready-hotkeys.exe --check-lockfile`. It discovers the running `LeagueClientUx.exe` and adjacent lockfile automatically. An optional lockfile path can still be supplied. A `404` is expected when the client is not attached to a matchmaking queue; it confirms the LCU is reachable.
 
 To validate live ready-check events, run `league-ready-hotkeys.exe --watch-ready-check` before queueing. It waits for the LCU event and prints the sanitized active/response state when a ready check appears.
+
+To validate global key registration independently, run `league-ready-hotkeys.exe --check-hotkeys`, press F1 and F2 during the 30-second window, and confirm it prints the corresponding binding. The command temporarily captures both keys globally and releases them when it exits.

@@ -1,5 +1,7 @@
 pub mod app;
 pub mod lcu;
+#[cfg(windows)]
+pub mod windows;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppState {
