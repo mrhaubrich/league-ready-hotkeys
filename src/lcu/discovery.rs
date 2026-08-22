@@ -1,4 +1,5 @@
 use thiserror::Error;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LcuCredentials {
@@ -21,6 +22,28 @@ pub enum LockfileError {
     InvalidPort,
     #[error("lockfile protocol is invalid")]
     InvalidProtocol,
+    #[cfg(windows)]
+    #[error("LeagueClientUx.exe is not running")]
+    ClientNotRunning,
+    #[cfg(windows)]
+    #[error("League executable path is unavailable")]
+    ExecutableUnavailable,
+    #[cfg(windows)]
+    #[error("League lockfile is unavailable")]
+    LockfileUnavailable,
+}
+
+#[cfg(windows)]
+pub fn discover_lockfile() -> Result<PathBuf, LockfileError> {
+    use sysinfo::System;
+    let mut system = System::new();
+    system.refresh_processes();
+    let process = system.processes_by_name("LeagueClientUx.exe").next()
+        .ok_or(LockfileError::ClientNotRunning)?;
+    let executable = process.exe().ok_or(LockfileError::ExecutableUnavailable)?;
+    let lockfile = executable.parent().ok_or(LockfileError::ExecutableUnavailable)?.join("lockfile");
+    if !lockfile.is_file() { return Err(LockfileError::LockfileUnavailable); }
+    Ok(lockfile)
 }
 
 pub fn parse_lockfile(input: &str) -> Result<LcuCredentials, LockfileError> {

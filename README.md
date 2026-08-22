@@ -13,3 +13,5 @@ The League Client API is a local, unsupported interface. The application must ne
 Requires the stable Rust MSVC toolchain. Run `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and `cargo test --all-targets`.
 
 The current foundation parses an LCU lockfile and provides the Windows-only authenticated transport boundary. No credentials are written to disk or included in diagnostics.
+
+For a real read-only connection check, run `league-ready-hotkeys.exe --check-lockfile`. It discovers the running `LeagueClientUx.exe` and adjacent lockfile automatically. An optional lockfile path can still be supplied. A `404` is expected when the client is not attached to a matchmaking queue; it confirms the LCU is reachable.
