@@ -74,7 +74,7 @@ fn main() {
 
 #[cfg(windows)]
 fn run_hotkey_diagnostic() {
-    use std::time::{Duration, Instant};
+use std::time::{Duration, Instant};
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{PeekMessageW, MSG, PM_REMOVE, WM_HOTKEY};
     let mut manager = league_ready_hotkeys::windows::hotkeys::HotkeyManager::new(HWND(std::ptr::null_mut()));
@@ -102,10 +102,13 @@ fn run_hotkey_diagnostic() {
 
 #[cfg(windows)]
 fn run_tray_diagnostic() {
-    use std::time::Duration;
-    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
-    let owner = unsafe { GetForegroundWindow() };
-    if owner.0.is_null() { eprintln!("could not obtain a tray owner window"); std::process::exit(1); }
+    use std::time::{Duration, Instant};
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DestroyWindow, PeekMessageW, RegisterClassW, MSG, PM_REMOVE, HWND_MESSAGE, WS_OVERLAPPED, WM_RBUTTONUP, WM_APP, WNDCLASSW, CS_HREDRAW, CS_VREDRAW};
+    let class_name = windows::core::w!("LeagueReadyHotkeysTrayWindow");
+    unsafe { let _ = RegisterClassW(&WNDCLASSW { lpfnWndProc: Some(tray_wnd_proc), hInstance: Default::default(), lpszClassName: class_name, style: CS_HREDRAW | CS_VREDRAW, ..Default::default() }); }
+    let owner = unsafe { CreateWindowExW(Default::default(), class_name, windows::core::w!("League Ready Hotkeys"), WS_OVERLAPPED, 0, 0, 0, 0, HWND_MESSAGE, None, None, None) }
+        .unwrap_or_else(|error| { eprintln!("could not create tray message window: {error}"); std::process::exit(1); });
     let icon_path = std::path::Path::new("assets\\tray-icon.ico");
     let mut tray = league_ready_hotkeys::windows::tray::TrayIcon::with_icon(owner, icon_path)
         .unwrap_or_else(|error| { eprintln!("could not load tray icon: {error}"); std::process::exit(1); });
@@ -113,10 +116,37 @@ fn run_tray_diagnostic() {
         eprintln!("could not add tray icon");
         std::process::exit(1);
     }
-    println!("tray icon active for 30 seconds");
-    std::thread::sleep(Duration::from_secs(30));
+    println!("tray icon active for 30 seconds; right-click it to open the menu");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    'tray: while Instant::now() < deadline {
+        let mut message = MSG::default();
+        while unsafe { PeekMessageW(&mut message, HWND(std::ptr::null_mut()), 0, 0, PM_REMOVE) }.as_bool() {
+            if message.message == WM_APP + 2 {
+                break 'tray;
+            }
+            if message.message == WM_APP + 1 {
+                println!("tray callback received: event={} expected={}", message.lParam.0, WM_RBUTTONUP);
+                if message.lParam.0 as u32 == WM_RBUTTONUP && tray.show_menu() { break 'tray; }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
     tray.remove();
+    unsafe { let _ = DestroyWindow(owner); }
     println!("tray icon removed");
+}
+
+#[cfg(windows)]
+static TRAY_EXIT_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(windows)]
+unsafe extern "system" fn tray_wnd_proc(hwnd: windows::Win32::Foundation::HWND, message: u32, wparam: windows::Win32::Foundation::WPARAM, lparam: windows::Win32::Foundation::LPARAM) -> windows::Win32::Foundation::LRESULT {
+    if message == league_ready_hotkeys::windows::tray::TRAY_MESSAGE {
+        let _ = windows::Win32::UI::WindowsAndMessaging::PostMessageW(hwnd, windows::Win32::UI::WindowsAndMessaging::WM_APP + 1, wparam, lparam);
+    } else if message == windows::Win32::UI::WindowsAndMessaging::WM_COMMAND && (wparam.0 & 0xffff) as u32 == league_ready_hotkeys::windows::tray::MENU_EXIT {
+        TRAY_EXIT_REQUESTED.store(true, std::sync::atomic::Ordering::Release);
+    }
+    windows::Win32::UI::WindowsAndMessaging::DefWindowProcW(hwnd, message, wparam, lparam)
 }
 
 #[cfg(not(windows))]
