@@ -26,6 +26,8 @@ Startup registration can be validated with `--enable-startup`, `--check-startup`
 
 Tray lifecycle can be validated with `--check-tray`; it adds the native tray icon for 30 seconds and removes it on exit.
 
+Notification rendering can be validated without entering a queue with `--check-notification`; it displays the bottom-right prompt for 30 seconds.
+
 Launching the executable without arguments now starts the background utility. It discovers League every two seconds, polls the ready-check state, and registers F1/F2 only while an unanswered ready check is active. Use the tray menu to exit.
 
 ## Release validation

@@ -10,6 +10,10 @@ fn main() {
         run_tray_diagnostic();
         return;
     }
+    if mode == Some("--check-notification") {
+        run_notification_diagnostic();
+        return;
+    }
     if matches!(
         mode,
         Some("--check-startup") | Some("--enable-startup") | Some("--disable-startup")
@@ -123,8 +127,9 @@ fn run_background() {
     use std::time::{Duration, Instant};
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DestroyWindow, PeekMessageW, RegisterClassW, CS_HREDRAW, CS_VREDRAW,
-        HWND_MESSAGE, MSG, PM_REMOVE, WM_APP, WM_HOTKEY, WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPED,
+        CreateWindowExW, DestroyWindow, DispatchMessageW, PeekMessageW, RegisterClassW, CS_HREDRAW,
+        CS_VREDRAW, HWND_MESSAGE, MSG, PM_REMOVE, WM_APP, WM_HOTKEY, WM_RBUTTONUP, WNDCLASSW,
+        WS_OVERLAPPED,
     };
     let class_name = windows::core::w!("LeagueReadyHotkeysBackgroundWindow");
     unsafe {
@@ -167,6 +172,12 @@ fn run_background() {
         std::process::exit(1);
     }
     let mut hotkeys = league_ready_hotkeys::windows::hotkeys::HotkeyManager::new(owner);
+    let notification =
+        league_ready_hotkeys::windows::notification::ReadyCheckNotification::new(owner)
+            .unwrap_or_else(|error| {
+                eprintln!("could not create notification: {error}");
+                std::process::exit(1);
+            });
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -227,6 +238,9 @@ fn run_background() {
                     let _ = hotkeys.set_enabled(false);
                 }
             }
+            unsafe {
+                DispatchMessageW(&message);
+            }
         }
         if Instant::now() >= next_poll {
             next_poll = Instant::now() + Duration::from_secs(2);
@@ -257,6 +271,7 @@ fn run_background() {
             if ready != active {
                 active = ready;
                 let _ = hotkeys.set_enabled(active);
+                notification.set_active(active);
             }
         }
         std::thread::sleep(Duration::from_millis(25));
@@ -267,6 +282,71 @@ fn run_background() {
         let _ = DestroyWindow(owner);
     }
     println!("background utility stopped");
+}
+
+#[cfg(windows)]
+fn run_notification_diagnostic() {
+    use std::time::{Duration, Instant};
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DestroyWindow, DispatchMessageW, PeekMessageW, RegisterClassW, CS_HREDRAW,
+        CS_VREDRAW, HWND_MESSAGE, MSG, PM_REMOVE, WNDCLASSW, WS_OVERLAPPED,
+    };
+    let class_name = windows::core::w!("LeagueReadyHotkeysNotificationDiagnostic");
+    unsafe {
+        let _ = RegisterClassW(&WNDCLASSW {
+            lpfnWndProc: Some(tray_wnd_proc),
+            hInstance: Default::default(),
+            lpszClassName: class_name,
+            style: CS_HREDRAW | CS_VREDRAW,
+            ..Default::default()
+        });
+    }
+    let owner = unsafe {
+        CreateWindowExW(
+            Default::default(),
+            class_name,
+            windows::core::w!("League Ready Hotkeys"),
+            WS_OVERLAPPED,
+            0,
+            0,
+            0,
+            0,
+            HWND_MESSAGE,
+            None,
+            None,
+            None,
+        )
+    }
+    .unwrap_or_else(|error| {
+        eprintln!("could not create notification window: {error}");
+        std::process::exit(1);
+    });
+    let notification =
+        league_ready_hotkeys::windows::notification::ReadyCheckNotification::new(owner)
+            .unwrap_or_else(|error| {
+                eprintln!("could not create notification: {error}");
+                std::process::exit(1);
+            });
+    notification.set_active(true);
+    println!("notification diagnostic active for 30 seconds");
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while Instant::now() < deadline {
+        let mut message = MSG::default();
+        while unsafe { PeekMessageW(&mut message, HWND(std::ptr::null_mut()), 0, 0, PM_REMOVE) }
+            .as_bool()
+        {
+            unsafe {
+                DispatchMessageW(&message);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    notification.set_active(false);
+    unsafe {
+        let _ = DestroyWindow(owner);
+    }
+    println!("notification diagnostic complete");
 }
 
 #[cfg(windows)]

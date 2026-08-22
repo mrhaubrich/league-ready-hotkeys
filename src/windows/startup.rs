@@ -6,7 +6,8 @@ use std::path::Path;
 use windows::core::{w, Error, Result};
 use windows::Win32::System::Registry::{
     RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegGetValueW, RegSetValueExW, HKEY_CURRENT_USER,
-    KEY_QUERY_VALUE, KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ, RRF_RT_REG_SZ,
+    KEY_QUERY_VALUE, KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ, RRF_RT_REG_DWORD,
+    RRF_RT_REG_SZ,
 };
 
 fn key() -> Result<windows::Win32::System::Registry::HKEY> {
@@ -70,6 +71,39 @@ pub fn is_enabled() -> Result<bool> {
         let _ = RegCloseKey(handle);
     }
     Ok(status.0 == 0)
+}
+
+pub fn is_dark_mode() -> bool {
+    let mut handle = windows::Win32::System::Registry::HKEY::default();
+    let opened = unsafe {
+        windows::Win32::System::Registry::RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
+            0,
+            KEY_QUERY_VALUE,
+            &mut handle,
+        )
+    };
+    if opened.0 != 0 {
+        return false;
+    }
+    let mut value = 1u32;
+    let mut size = std::mem::size_of::<u32>() as u32;
+    let status = unsafe {
+        RegGetValueW(
+            handle,
+            None,
+            w!("AppsUseLightTheme"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some((&mut value as *mut u32).cast()),
+            Some(&mut size),
+        )
+    };
+    unsafe {
+        let _ = RegCloseKey(handle);
+    }
+    status.0 == 0 && value == 0
 }
 
 #[cfg(test)]
