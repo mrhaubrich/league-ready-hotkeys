@@ -1,8 +1,9 @@
 #[cfg(windows)]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.get(1).map(String::as_str) != Some("--check-lockfile") {
-        println!("league-ready-hotkeys foundation; use --check-lockfile for a read-only LCU test");
+    let mode = args.get(1).map(String::as_str);
+    if !matches!(mode, Some("--check-lockfile") | Some("--watch-ready-check")) {
+        println!("use --check-lockfile or --watch-ready-check");
         return;
     }
     let path = args.get(2).cloned().or_else(|| league_ready_hotkeys::lcu::discover_lockfile().ok().map(|path| path.to_string_lossy().into_owned()));
@@ -23,6 +24,10 @@ fn main() {
     let result = runtime.block_on(async {
         let client = league_ready_hotkeys::lcu::transport::LcuClient::new(&credentials)
             .map_err(|error| error.to_string())?;
+        if mode == Some("--watch-ready-check") {
+            let event = client.next_ready_check_event().await.map_err(|error| error.to_string())?;
+            return Ok(Some(serde_json::json!({"active": event.active, "response": format!("{:?}", event.response)})));
+        }
         client.ready_check().await.map_err(|error| error.to_string())
     });
     match result {
