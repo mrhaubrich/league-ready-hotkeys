@@ -12,3 +12,4 @@
 | Starts with Windows | 3 | LRH-006 | `src/windows/startup.rs`, registry manual check |
 | Low idle usage | 4 | LRH-007/008 | reconnect tests and measured release footprint |
 | Reconnect and shutdown | 3 | LRH-007 | `--watch-ready-check` connected to the live client; `--check-tray` removed the icon and exited cleanly |
+| Portable release | 4 | LRH-008 | release validation script passed; tray runtime and idle CPU/working-set measurements were acceptable |

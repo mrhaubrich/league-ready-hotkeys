@@ -13,7 +13,7 @@ Selection rule: choose the highest-RICE unblocked task in the active phase; depe
 | LRH-005 | Implement accept/decline commands | MUST | Complete | LRH-002–004 |
 | LRH-006 | Add tray lifecycle and startup toggle | SHOULD | Complete | LRH-005 |
 | LRH-007 | Harden reconnect, shutdown, and secrets | MUST | Complete | LRH-006 |
-| LRH-008 | Validate and package portable release | MUST | Validation-required | LRH-007 |
+| LRH-008 | Validate and package portable release | MUST | Complete | LRH-007 |
 
 Locked tasks require a concrete dependency completion and recorded validation evidence. Handoffs include changed files, tests run, failures, assumptions, and plan status updates.
 
