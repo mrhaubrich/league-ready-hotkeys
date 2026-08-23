@@ -16,6 +16,7 @@ pub const TRAY_MESSAGE: u32 = WM_USER + 1;
 pub const MENU_EXIT: u32 = 1;
 pub const MENU_STARTUP: u32 = 2;
 pub const MENU_NOTIFICATIONS: u32 = 3;
+pub const MENU_CONFIGURE_HOTKEYS: u32 = 4;
 
 pub struct TrayIcon {
     data: NOTIFYICONDATAW,
@@ -115,6 +116,12 @@ impl TrayIcon {
             let _ = AppendMenuW(
                 menu,
                 MF_STRING,
+                MENU_CONFIGURE_HOTKEYS as usize,
+                windows::core::w!("Configure hotkeys..."),
+            );
+            let _ = AppendMenuW(
+                menu,
+                MF_STRING,
                 MENU_EXIT as usize,
                 windows::core::w!("Exit"),
             );
@@ -159,5 +166,6 @@ mod tests {
     #[test]
     fn tray_identity_is_stable() {
         assert_eq!(TRAY_ID, 1);
+        assert_ne!(MENU_CONFIGURE_HOTKEYS, MENU_EXIT);
     }
 }

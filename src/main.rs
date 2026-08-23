@@ -14,6 +14,10 @@ fn main() {
         run_notification_diagnostic();
         return;
     }
+    if mode == Some("--check-settings") {
+        run_settings_diagnostic();
+        return;
+    }
     if mode == Some("--check-shortcuts") {
         let config = league_ready_hotkeys::windows::startup::load_shortcuts();
         println!(
@@ -258,6 +262,7 @@ fn run_background() {
         eprintln!("could not create notification: {error}");
         std::process::exit(1);
     });
+    let mut settings_window: Option<league_ready_hotkeys::windows::settings::HotkeySettings> = None;
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -305,6 +310,27 @@ fn run_background() {
                             !enabled,
                         );
                     }
+                }
+                if command == league_ready_hotkeys::windows::tray::MENU_CONFIGURE_HOTKEYS {
+                    if active {
+                        league_ready_hotkeys::windows::input_hooks::uninstall();
+                        custom_hooks_active = false;
+                    }
+                    if let Some(window) = settings_window.as_ref() {
+                        window.show();
+                    } else {
+                        match league_ready_hotkeys::windows::settings::HotkeySettings::new(owner) {
+                            Ok(window) => settings_window = Some(window),
+                            Err(error) => eprintln!("could not create hotkey settings: {error}"),
+                        }
+                    }
+                }
+            }
+            if message.message == league_ready_hotkeys::windows::settings::SETTINGS_UPDATED {
+                let (accept, decline) = league_ready_hotkeys::windows::startup::load_bindings();
+                notification.update_bindings(&accept, &decline);
+                if active {
+                    custom_hooks_active = league_ready_hotkeys::windows::input_hooks::install();
                 }
             }
             if message.message == WM_APP + 2 {
@@ -498,6 +524,69 @@ fn run_notification_diagnostic() {
         let _ = DestroyWindow(owner);
     }
     println!("notification diagnostic complete");
+}
+
+#[cfg(windows)]
+fn run_settings_diagnostic() {
+    use std::time::{Duration, Instant};
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DestroyWindow, DispatchMessageW, PeekMessageW, RegisterClassW, CS_HREDRAW,
+        CS_VREDRAW, HWND_MESSAGE, MSG, PM_REMOVE, WNDCLASSW, WS_OVERLAPPED,
+    };
+    let class_name = windows::core::w!("LeagueReadyHotkeysSettingsDiagnostic");
+    unsafe {
+        let _ = RegisterClassW(&WNDCLASSW {
+            lpfnWndProc: Some(tray_wnd_proc),
+            hInstance: Default::default(),
+            lpszClassName: class_name,
+            style: CS_HREDRAW | CS_VREDRAW,
+            ..Default::default()
+        });
+    }
+    let owner = unsafe {
+        CreateWindowExW(
+            Default::default(),
+            class_name,
+            windows::core::w!("League Ready Hotkeys"),
+            WS_OVERLAPPED,
+            0,
+            0,
+            0,
+            0,
+            HWND_MESSAGE,
+            None,
+            None,
+            None,
+        )
+    }
+    .unwrap_or_else(|error| {
+        eprintln!("could not create settings diagnostic owner: {error}");
+        std::process::exit(1);
+    });
+    let settings = league_ready_hotkeys::windows::settings::HotkeySettings::new(owner)
+        .unwrap_or_else(|error| {
+            eprintln!("could not create settings window: {error}");
+            std::process::exit(1);
+        });
+    println!("settings diagnostic active for 60 seconds");
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while Instant::now() < deadline {
+        let mut message = MSG::default();
+        while unsafe { PeekMessageW(&mut message, HWND(std::ptr::null_mut()), 0, 0, PM_REMOVE) }
+            .as_bool()
+        {
+            unsafe {
+                DispatchMessageW(&message);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    drop(settings);
+    unsafe {
+        let _ = DestroyWindow(owner);
+    }
+    println!("settings diagnostic complete");
 }
 
 #[cfg(windows)]

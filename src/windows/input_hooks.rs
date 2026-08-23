@@ -1,7 +1,7 @@
 #![cfg(windows)]
 
 use crate::shortcuts::ShortcutBindings;
-use std::sync::OnceLock;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
@@ -11,7 +11,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_MBUTTONDOWN, WM_MOUSEMOVE, WM_RBUTTONDOWN, WM_XBUTTONDOWN,
 };
 
-static BINDINGS: OnceLock<ShortcutBindings> = OnceLock::new();
+static BINDINGS: Mutex<Option<ShortcutBindings>> = Mutex::new(None);
 static ACTION: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 pub fn take_action() -> Option<crate::app::HotkeyAction> {
     match ACTION.swap(0, std::sync::atomic::Ordering::AcqRel) {
@@ -22,7 +22,9 @@ pub fn take_action() -> Option<crate::app::HotkeyAction> {
 }
 pub fn install() -> bool {
     let (accept, decline) = crate::windows::startup::load_bindings();
-    let _ = BINDINGS.set(ShortcutBindings { accept, decline });
+    if let Ok(mut bindings) = BINDINGS.lock() {
+        *bindings = Some(ShortcutBindings { accept, decline });
+    }
     unsafe {
         KEY_HOOK = SetWindowsHookExW(WH_KEYBOARD_LL, Some(key_proc), HINSTANCE::default(), 0)
             .unwrap_or_default();
@@ -32,6 +34,10 @@ pub fn install() -> bool {
     }
 }
 pub fn uninstall() {
+    ACTION.store(0, std::sync::atomic::Ordering::Release);
+    if let Ok(mut bindings) = BINDINGS.lock() {
+        *bindings = None;
+    }
     unsafe {
         let _ = UnhookWindowsHookEx(KEY_HOOK);
         let _ = UnhookWindowsHookEx(MOUSE_HOOK);
@@ -45,7 +51,9 @@ static mut MOUSE_HOOK: HHOOK = HHOOK(std::ptr::null_mut());
 
 pub fn run_diagnostic() {
     let (accept, decline) = crate::windows::startup::load_bindings();
-    let _ = BINDINGS.set(ShortcutBindings { accept, decline });
+    if let Ok(mut bindings) = BINDINGS.lock() {
+        *bindings = Some(ShortcutBindings { accept, decline });
+    }
     unsafe {
         KEY_HOOK = SetWindowsHookExW(WH_KEYBOARD_LL, Some(key_proc), HINSTANCE::default(), 0)
             .unwrap_or_default();
@@ -91,9 +99,11 @@ unsafe extern "system" fn key_proc(code: i32, wparam: WPARAM, lparam: LPARAM) ->
         if GetAsyncKeyState(0x5B) < 0 || GetAsyncKeyState(0x5C) < 0 {
             modifiers.push("win");
         }
-        let action = BINDINGS
-            .get()
-            .and_then(|bindings| bindings.action_for_keyboard(data.vkCode, &modifiers));
+        let action = BINDINGS.lock().ok().and_then(|bindings| {
+            bindings
+                .as_ref()?
+                .action_for_keyboard(data.vkCode, &modifiers)
+        });
         println!("keyboard input: vk={} action={action:?}", data.vkCode);
         if let Some(action) = action {
             ACTION.store(
@@ -113,9 +123,9 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
     if code >= 0 {
         let data = &*(lparam.0 as *const MSLLHOOKSTRUCT);
         let event = match wparam.0 as u32 {
-            WM_LBUTTONDOWN => "left",
-            WM_RBUTTONDOWN => "right",
-            WM_MBUTTONDOWN => "middle",
+            WM_LBUTTONDOWN => "mouse1",
+            WM_RBUTTONDOWN => "mouse2",
+            WM_MBUTTONDOWN => "mouse3",
             WM_XBUTTONDOWN if (data.mouseData >> 16) == 1 => "mouse4",
             WM_XBUTTONDOWN => "mouse5",
             WM_MOUSEMOVE => "move",
@@ -123,8 +133,9 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
         };
         if event != "move" {
             let action = BINDINGS
-                .get()
-                .and_then(|bindings| bindings.action_for_mouse(event));
+                .lock()
+                .ok()
+                .and_then(|bindings| bindings.as_ref()?.action_for_mouse(event));
             println!(
                 "mouse input: button={} x={} y={} action={action:?}",
                 event, data.pt.x, data.pt.y

@@ -54,6 +54,23 @@ impl ShortcutBindings {
 }
 
 impl ShortcutBinding {
+    pub fn canonical(&self) -> String {
+        let mut parts = self
+            .modifiers
+            .iter()
+            .map(|modifier| match modifier.as_str() {
+                "ctrl" => "Ctrl",
+                "alt" => "Alt",
+                "shift" => "Shift",
+                "win" => "Win",
+                other => other,
+            })
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        parts.push(self.input.clone());
+        parts.join("+")
+    }
+
     pub fn parse(value: &str) -> Result<Self, ShortcutError> {
         let parts: Vec<_> = value
             .split('+')
@@ -98,7 +115,14 @@ impl ShortcutBinding {
     }
 
     pub fn matches_mouse(&self, button: &str) -> bool {
-        self.input.eq_ignore_ascii_case(button)
+        let lowered = button.to_ascii_lowercase();
+        let normalized = match lowered.as_str() {
+            "left" => "MOUSE1",
+            "right" => "MOUSE2",
+            "middle" => "MOUSE3",
+            other => other,
+        };
+        self.input.eq_ignore_ascii_case(normalized)
     }
 }
 
@@ -202,6 +226,10 @@ mod tests {
     fn parses_keyboard_combo_and_mouse_button() {
         assert_eq!(ShortcutBinding::parse("Ctrl+Shift+A").unwrap().input, "A");
         assert_eq!(ShortcutBinding::parse("Mouse4").unwrap().input, "MOUSE4");
+        assert_eq!(
+            ShortcutBinding::parse("Ctrl+Shift+A").unwrap().canonical(),
+            "Ctrl+Shift+A"
+        );
     }
     #[test]
     fn matches_keyboard_and_mouse_events() {

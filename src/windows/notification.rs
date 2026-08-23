@@ -55,8 +55,8 @@ pub struct ReadyCheckNotification {
 }
 
 struct NotificationState {
-    accept: BindingVisual,
-    decline: BindingVisual,
+    accept: Mutex<BindingVisual>,
+    decline: Mutex<BindingVisual>,
     timer: Mutex<TimerProgress>,
 }
 
@@ -148,8 +148,8 @@ impl ReadyCheckNotification {
             let _ = SetWindowRgn(hwnd, region, true);
         }
         let state = Box::new(NotificationState {
-            accept: BindingVisual::from_binding(accept),
-            decline: BindingVisual::from_binding(decline),
+            accept: Mutex::new(BindingVisual::from_binding(accept)),
+            decline: Mutex::new(BindingVisual::from_binding(decline)),
             timer: Mutex::new(TimerProgress {
                 elapsed: 0.0,
                 updated_at: Instant::now(),
@@ -202,6 +202,18 @@ impl ReadyCheckNotification {
         if let Ok(mut timer) = self._state.timer.lock() {
             timer.elapsed = elapsed.clamp(0.0, READY_CHECK_DURATION_SECS);
             timer.updated_at = Instant::now();
+        }
+        unsafe {
+            let _ = InvalidateRect(self.hwnd, None, false);
+        }
+    }
+
+    pub fn update_bindings(&self, accept: &ShortcutBinding, decline: &ShortcutBinding) {
+        if let Ok(mut value) = self._state.accept.lock() {
+            *value = BindingVisual::from_binding(accept);
+        }
+        if let Ok(mut value) = self._state.decline.lock() {
+            *value = BindingVisual::from_binding(decline);
         }
         unsafe {
             let _ = InvalidateRect(self.hwnd, None, false);
@@ -510,26 +522,30 @@ unsafe extern "system" fn notification_proc(
 
             let _ = SelectObject(hdc, key_font);
             let _ = SetTextColor(hdc, white);
-            draw_binding(
-                hdc,
-                RECT {
-                    left: ACCEPT_RECT.left + 12,
-                    top: 143,
-                    right: ACCEPT_RECT.right - 12,
-                    bottom: 175,
-                },
-                &state.accept,
-            );
-            draw_binding(
-                hdc,
-                RECT {
-                    left: DECLINE_RECT.left + 10,
-                    top: 143,
-                    right: DECLINE_RECT.right - 10,
-                    bottom: 175,
-                },
-                &state.decline,
-            );
+            if let Ok(binding) = state.accept.lock() {
+                draw_binding(
+                    hdc,
+                    RECT {
+                        left: ACCEPT_RECT.left + 12,
+                        top: 143,
+                        right: ACCEPT_RECT.right - 12,
+                        bottom: 175,
+                    },
+                    &binding,
+                );
+            }
+            if let Ok(binding) = state.decline.lock() {
+                draw_binding(
+                    hdc,
+                    RECT {
+                        left: DECLINE_RECT.left + 10,
+                        top: 143,
+                        right: DECLINE_RECT.right - 10,
+                        bottom: 175,
+                    },
+                    &binding,
+                );
+            }
 
             let track = RECT {
                 left: 20,

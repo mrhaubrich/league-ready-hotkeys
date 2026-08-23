@@ -32,6 +32,10 @@ The notification countdown uses the LCU ready-check `timer` field. Live contract
 
 Shortcut configuration can be inspected with `--check-shortcuts` and changed with `--set-shortcuts F3 F4`. F1/F2 remain the defaults until another pair is saved; duplicate or unsupported keys are rejected.
 
+To configure shortcuts from the app, right-click the tray icon and choose `Configure hotkeys...`. Select `Accept` or `Decline`, then press the desired keyboard combination or mouse button. The pair is validated, saved per user, and reflected by the next notification without restarting the app.
+
+The settings window frame can be validated independently with `league-ready-hotkeys.exe --check-settings`; it opens for 60 seconds with the standard Windows title bar, drag frame, and close button.
+
 Arbitrary binding syntax can be validated with `--check-binding Ctrl+Shift+A`, `--check-binding Alt+R`, or `--check-binding Mouse4`.
 
 Low-level keyboard and mouse input hooks can be validated with `--check-input-hook`; press keys and mouse buttons during its 30-second diagnostic window.
