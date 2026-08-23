@@ -3,6 +3,7 @@
 use futures_util::{SinkExt, StreamExt};
 use reqwest::{Client, StatusCode};
 use serde_json::Value;
+use std::time::Duration;
 use thiserror::Error;
 use tokio_tungstenite::{
     connect_async_tls_with_config,
@@ -12,6 +13,9 @@ use tokio_tungstenite::{
 
 use super::{parse_ready_check_event, LcuCredentials, ReadyCheck, ACCEPT, DECLINE, READY_CHECK};
 use crate::reconnect::ReconnectPolicy;
+
+pub const LCU_CONNECT_TIMEOUT: Duration = Duration::from_millis(250);
+pub const LCU_REQUEST_TIMEOUT: Duration = Duration::from_millis(1500);
 
 #[derive(Debug, Error)]
 pub enum TransportError {
@@ -39,6 +43,9 @@ impl LcuClient {
         // from a parsed lockfile and always targets literal loopback.
         let client = Client::builder()
             .danger_accept_invalid_certs(true)
+            .connect_timeout(LCU_CONNECT_TIMEOUT)
+            .read_timeout(LCU_REQUEST_TIMEOUT)
+            .timeout(LCU_REQUEST_TIMEOUT)
             .build()?;
         Ok(Self {
             client,

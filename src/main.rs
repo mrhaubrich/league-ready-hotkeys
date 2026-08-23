@@ -44,6 +44,10 @@ fn main() {
         run_shortcut_diagnostic();
         return;
     }
+    if mode == Some("--check-lcu-worker") {
+        run_lcu_worker_diagnostic();
+        return;
+    }
     if mode == Some("--set-shortcuts") {
         let config = league_ready_hotkeys::shortcuts::ShortcutConfig::parse(
             args.get(2).map(String::as_str).unwrap_or_default(),
@@ -224,9 +228,9 @@ fn run_background() {
     use std::time::{Duration, Instant};
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DestroyWindow, DispatchMessageW, PeekMessageW, RegisterClassW, CS_HREDRAW,
-        CS_VREDRAW, HWND_MESSAGE, MSG, PM_REMOVE, WM_APP, WM_HOTKEY, WM_RBUTTONUP, WNDCLASSW,
-        WS_OVERLAPPED,
+        CreateWindowExW, DestroyWindow, DispatchMessageW, PeekMessageW, PostMessageW,
+        RegisterClassW, CS_HREDRAW, CS_VREDRAW, HWND_MESSAGE, MSG, PM_REMOVE, WM_APP, WM_HOTKEY,
+        WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPED,
     };
     let class_name = windows::core::w!("LeagueReadyHotkeysBackgroundWindow");
     unsafe {
@@ -281,13 +285,21 @@ fn run_background() {
         std::process::exit(1);
     });
     let mut settings_window: Option<league_ready_hotkeys::windows::settings::HotkeySettings> = None;
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("create background runtime");
-    let mut client: Option<league_ready_hotkeys::lcu::transport::LcuClient> = None;
+    const LCU_WORKER_MESSAGE: u32 = WM_APP + 5;
+    let owner_address = owner.0 as usize;
+    let mut worker = league_ready_hotkeys::lcu::background::LcuWorker::spawn(move || {
+        let owner = HWND(owner_address as *mut std::ffi::c_void);
+        unsafe {
+            let _ = PostMessageW(owner, LCU_WORKER_MESSAGE, None, None);
+        }
+    });
+    let mut action_gate = league_ready_hotkeys::app::ActionGate::default();
     let mut active = false;
+    let mut observed_ready = false;
     let mut custom_hooks_active = false;
+    let mut poll_in_flight = false;
+    let mut ready_generation = 0_u64;
+    let mut pending_action: Option<u64> = None;
     let mut next_poll = Instant::now();
     println!(
         "League Ready Hotkeys running in background; F1/F2 activate only during a ready check"
@@ -359,126 +371,229 @@ fn run_background() {
             }
             if message.message == WM_HOTKEY && active {
                 let action = match message.wParam.0 as i32 {
-                    league_ready_hotkeys::windows::hotkeys::ACCEPT_HOTKEY_ID => Some("accept"),
-                    league_ready_hotkeys::windows::hotkeys::DECLINE_HOTKEY_ID => Some("decline"),
+                    league_ready_hotkeys::windows::hotkeys::ACCEPT_HOTKEY_ID => {
+                        Some(league_ready_hotkeys::app::HotkeyAction::Accept)
+                    }
+                    league_ready_hotkeys::windows::hotkeys::DECLINE_HOTKEY_ID => {
+                        Some(league_ready_hotkeys::app::HotkeyAction::Decline)
+                    }
                     _ => None,
                 };
-                if let (Some(action), Some(lcu)) = (action, client.as_ref()) {
-                    let result = runtime.block_on(async {
-                        if action == "accept" {
-                            lcu.accept().await
-                        } else {
-                            lcu.decline().await
-                        }
-                    });
-                    if let Err(error) = result {
-                        eprintln!("LCU action failed: {error}");
-                    }
-                    active = false;
-                    let _ = hotkeys.set_enabled(false);
-                    league_ready_hotkeys::windows::input_hooks::uninstall();
-                    custom_hooks_active = false;
-                    notification.set_active(false);
+                if let Some(action) = action {
+                    submit_background_action(
+                        action,
+                        ready_generation,
+                        &worker,
+                        &mut action_gate,
+                        &mut pending_action,
+                        &mut active,
+                        &mut hotkeys,
+                        &mut custom_hooks_active,
+                        &notification,
+                    );
                 }
             }
             unsafe {
                 DispatchMessageW(&message);
             }
         }
-        if let Some(requested) = notification.take_action().filter(|_| active) {
-            if let Some(lcu) = client.as_ref() {
-                let result = runtime.block_on(async {
-                    match requested {
-                        league_ready_hotkeys::app::HotkeyAction::Accept => lcu.accept().await,
-                        league_ready_hotkeys::app::HotkeyAction::Decline => lcu.decline().await,
+        while let Some(event) = worker.try_recv() {
+            match event {
+                league_ready_hotkeys::lcu::background::WorkerEvent::PollFinished { ready } => {
+                    poll_in_flight = false;
+                    let ready = ready.filter(|state| state.active);
+                    if let Some(state) = ready.as_ref() {
+                        notification.set_timer(state.timer);
                     }
-                });
-                if let Err(error) = result {
-                    eprintln!("notification action failed: {error}");
+                    if ready.is_some() {
+                        if !observed_ready {
+                            ready_generation = ready_generation.wrapping_add(1).max(1);
+                            action_gate.update_ready_check(true);
+                        }
+                        observed_ready = true;
+                        if pending_action.is_none() && !active {
+                            set_ready_controls(
+                                true,
+                                &mut active,
+                                &mut hotkeys,
+                                shortcut_config,
+                                &mut custom_hooks_active,
+                                &notification,
+                            );
+                        }
+                    } else {
+                        observed_ready = false;
+                        pending_action = None;
+                        action_gate.update_ready_check(false);
+                        set_ready_controls(
+                            false,
+                            &mut active,
+                            &mut hotkeys,
+                            shortcut_config,
+                            &mut custom_hooks_active,
+                            &notification,
+                        );
+                    }
                 }
-                active = false;
-                let _ = hotkeys.set_enabled(false);
-                league_ready_hotkeys::windows::input_hooks::uninstall();
-                custom_hooks_active = false;
-                notification.set_active(false);
+                league_ready_hotkeys::lcu::background::WorkerEvent::ActionFinished {
+                    request_id,
+                    succeeded,
+                } => {
+                    if pending_action == Some(request_id) {
+                        next_poll = Instant::now();
+                        if !succeeded {
+                            eprintln!("explicit LCU action failed");
+                            pending_action = None;
+                            observed_ready = false;
+                            action_gate.update_ready_check(false);
+                        }
+                    }
+                }
             }
+        }
+        if let Some(requested) = notification.take_action().filter(|_| active) {
+            submit_background_action(
+                requested,
+                ready_generation,
+                &worker,
+                &mut action_gate,
+                &mut pending_action,
+                &mut active,
+                &mut hotkeys,
+                &mut custom_hooks_active,
+                &notification,
+            );
         }
         if active && custom_hooks_active {
             if let Some(action) = league_ready_hotkeys::windows::input_hooks::take_action() {
-                if let Some(lcu) = client.as_ref() {
-                    let result = runtime.block_on(async {
-                        match action {
-                            league_ready_hotkeys::app::HotkeyAction::Accept => lcu.accept().await,
-                            league_ready_hotkeys::app::HotkeyAction::Decline => lcu.decline().await,
-                        }
-                    });
-                    if let Err(error) = result {
-                        eprintln!("custom shortcut action failed: {error}");
-                    }
-                    active = false;
-                    let _ = hotkeys.set_enabled(false);
-                    league_ready_hotkeys::windows::input_hooks::uninstall();
-                    custom_hooks_active = false;
-                    notification.set_active(false);
-                }
+                submit_background_action(
+                    action,
+                    ready_generation,
+                    &worker,
+                    &mut action_gate,
+                    &mut pending_action,
+                    &mut active,
+                    &mut hotkeys,
+                    &mut custom_hooks_active,
+                    &notification,
+                );
             }
         }
-        if Instant::now() >= next_poll {
+        if !poll_in_flight && Instant::now() >= next_poll {
             next_poll = Instant::now() + Duration::from_secs(2);
-            if let Ok(path) = league_ready_hotkeys::lcu::discover_lockfile() {
-                if let Ok(contents) = std::fs::read_to_string(path) {
-                    if let Ok(credentials) = league_ready_hotkeys::lcu::parse_lockfile(&contents) {
-                        if let Ok(lcu) =
-                            league_ready_hotkeys::lcu::transport::LcuClient::new(&credentials)
-                        {
-                            client = Some(lcu);
-                        }
-                    }
-                }
-            } else {
-                client = None;
-            }
-            let ready_state = if let Some(lcu) = client.as_ref() {
-                runtime
-                    .block_on(lcu.ready_check())
-                    .ok()
-                    .flatten()
-                    .and_then(|payload| league_ready_hotkeys::lcu::parse_ready_check(&payload).ok())
-            } else {
-                None
-            };
-            let ready = ready_state
-                .as_ref()
-                .map(|state| state.active)
-                .unwrap_or(false);
-            if let Some(state) = ready_state.as_ref().filter(|state| state.active) {
-                notification.set_timer(state.timer);
-            }
-            if ready != active {
-                active = ready;
-                let _ = hotkeys.set_enabled_with_config(active, shortcut_config);
-                if active {
-                    custom_hooks_active = league_ready_hotkeys::windows::input_hooks::install();
-                } else {
-                    league_ready_hotkeys::windows::input_hooks::uninstall();
-                    custom_hooks_active = false;
-                }
-                notification.set_active(
-                    active
-                        && league_ready_hotkeys::windows::startup::notifications_enabled()
-                            .unwrap_or(true),
+            poll_in_flight = worker.request_poll();
+            if !poll_in_flight {
+                observed_ready = false;
+                pending_action = None;
+                action_gate.update_ready_check(false);
+                set_ready_controls(
+                    false,
+                    &mut active,
+                    &mut hotkeys,
+                    shortcut_config,
+                    &mut custom_hooks_active,
+                    &notification,
                 );
             }
         }
         std::thread::sleep(Duration::from_millis(25));
     }
-    let _ = hotkeys.set_enabled(false);
-    league_ready_hotkeys::windows::input_hooks::uninstall();
+    set_ready_controls(
+        false,
+        &mut active,
+        &mut hotkeys,
+        shortcut_config,
+        &mut custom_hooks_active,
+        &notification,
+    );
+    action_gate.update_ready_check(false);
     tray.remove();
+    worker.shutdown();
     unsafe {
         let _ = DestroyWindow(owner);
     }
     println!("background utility stopped");
+}
+
+#[cfg(windows)]
+#[allow(clippy::too_many_arguments)]
+fn submit_background_action(
+    action: league_ready_hotkeys::app::HotkeyAction,
+    ready_generation: u64,
+    worker: &league_ready_hotkeys::lcu::background::LcuWorker,
+    action_gate: &mut league_ready_hotkeys::app::ActionGate,
+    pending_action: &mut Option<u64>,
+    active: &mut bool,
+    hotkeys: &mut league_ready_hotkeys::windows::hotkeys::HotkeyManager,
+    custom_hooks_active: &mut bool,
+    notification: &league_ready_hotkeys::windows::notification::ReadyCheckNotification,
+) {
+    if action_gate.begin(action).is_none() {
+        return;
+    }
+    if worker.request_action(ready_generation, action) {
+        *pending_action = Some(ready_generation);
+        set_ready_controls(
+            false,
+            active,
+            hotkeys,
+            league_ready_hotkeys::shortcuts::ShortcutConfig::default(),
+            custom_hooks_active,
+            notification,
+        );
+    } else {
+        action_gate.update_ready_check(false);
+        *pending_action = None;
+        set_ready_controls(
+            false,
+            active,
+            hotkeys,
+            league_ready_hotkeys::shortcuts::ShortcutConfig::default(),
+            custom_hooks_active,
+            notification,
+        );
+    }
+}
+
+#[cfg(windows)]
+fn set_ready_controls(
+    enabled: bool,
+    active: &mut bool,
+    hotkeys: &mut league_ready_hotkeys::windows::hotkeys::HotkeyManager,
+    shortcut_config: league_ready_hotkeys::shortcuts::ShortcutConfig,
+    custom_hooks_active: &mut bool,
+    notification: &league_ready_hotkeys::windows::notification::ReadyCheckNotification,
+) {
+    if enabled == *active {
+        return;
+    }
+    *active = enabled;
+    let _ = hotkeys.set_enabled_with_config(enabled, shortcut_config);
+    if enabled {
+        *custom_hooks_active = league_ready_hotkeys::windows::input_hooks::install();
+    } else {
+        league_ready_hotkeys::windows::input_hooks::uninstall();
+        *custom_hooks_active = false;
+    }
+    notification.set_active(
+        enabled && league_ready_hotkeys::windows::startup::notifications_enabled().unwrap_or(true),
+    );
+}
+
+#[cfg(windows)]
+fn run_lcu_worker_diagnostic() {
+    match league_ready_hotkeys::lcu::background::run_stalled_transport_diagnostic() {
+        Ok(result) => println!(
+            "LCU worker diagnostic passed: submission={}us stalled-response={}ms caller-progress-iterations={}",
+            result.submission_latency.as_micros(),
+            result.response_latency.as_millis(),
+            result.ui_iterations
+        ),
+        Err(error) => {
+            eprintln!("LCU worker diagnostic failed: {error}");
+            std::process::exit(1);
+        }
+    }
 }
 
 #[cfg(windows)]

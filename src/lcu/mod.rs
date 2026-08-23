@@ -1,3 +1,5 @@
+#[cfg(windows)]
+pub mod background;
 mod discovery;
 #[cfg(windows)]
 pub use discovery::discover_lockfile;

@@ -20,7 +20,7 @@ Exit criteria:
 
 ## LRH-015 — Decouple LCU I/O from the Win32 message loop
 
-Priority: MUST. Status: Planned. Dependencies: LRH-014. RICE: 5 × 3 × 0.8 / 2 = 6.0.
+Priority: MUST. Status: Validation-required. Dependencies: LRH-014. RICE: 5 × 3 × 0.8 / 2 = 6.0.
 
 Move discovery and LCU HTTP work to a dedicated worker/runtime thread, report state and completions to the owner window, and configure measured loopback connection/read/total timeouts. Claim the existing action gate synchronously before dispatching an explicit action.
 
@@ -34,9 +34,17 @@ Acceptance:
 
 Validation: add deterministic stalled-transport tests and a credential-free hanging-loopback diagnostic; measure tray/Exit latency with WPR while the transport stalls; then perform a safe real-ready-check Accept/Decline exactly-once scenario.
 
+Implementation evidence (2026-08-23): production discovery, lockfile reading/parsing, HTTP client construction, ready-check GETs, and explicit Accept/Decline POSTs now run on one named LCU worker with a worker-owned current-thread Tokio runtime. The Win32 owner submits bounded commands and receives state/action completions through a channel plus a custom posted window message; the background message loop contains no LCU `block_on`, discovery, lockfile read, client construction, or HTTP request. Only one poll may be outstanding. A shared `ActionGate` claims every hotkey, low-level-hook, or notification action synchronously before enqueueing; matching ready-check generations suppress stale completions and resource reactivation. Action failure schedules fresh state reconciliation but never retries the POST. Shutdown disables hotkeys/hooks/notification, removes the tray icon, marks the worker stopping, skips queued actions, and joins only the currently bounded operation.
+
+Transport evidence: reqwest now uses a 250 ms loopback connection timeout and a 1.5 second read/total request timeout. Errors crossing the worker boundary are reduced to readiness or success state and never carry credentials, authenticated URLs, or raw lockfile data. Worker/channel failure is treated as disconnect and disables active resources.
+
+Executable validation: deterministic tests prove that a stalled transport does not block the command caller, a failed explicit action is attempted exactly once without retry, and shutdown skips an action queued behind stalled work. Rustfmt passed; all 43 tests passed; Clippy passed with warnings denied; an isolated optimized release build passed without replacing the user's running utility. The credential-free hanging-TLS-loopback diagnostic passed with 9 microseconds submission latency, 252 milliseconds bounded stalled response, and 420167 caller progress iterations. `git diff --check` passed.
+
+Validation evidence (2026-08-23): the user rebuilt/restarted the normal release utility, exercised the requested real Windows responsiveness and ready-check scenario, and explicitly confirmed that it works greatly. This closes the tray/Exit responsiveness, bounded transport, exactly-once action, outside-ready-check, disconnect, and shutdown cleanup gate. LRH-015 is complete.
+
 ## LRH-016 — Cache League discovery state and reuse the HTTP client
 
-Priority: MUST. Status: Locked. Dependencies: LRH-015. RICE: 3 × 2 × 1.0 / 1 = 6.0.
+Priority: MUST. Status: Planned. Dependencies: LRH-015. RICE: 3 × 2 × 1.0 / 1 = 6.0.
 
 Cache the discovered process/lockfile identity, parsed connection parameters, and `LcuClient`. Reuse the connection pool while the client remains valid; invalidate on process exit, lockfile metadata change, authentication/connection failure, or League restart.
 
@@ -116,7 +124,7 @@ Validation: hold the menu open for at least 15 seconds across ready-check activa
 
 ## LRH-021 — Move notification child process I/O and teardown off the message thread
 
-Priority: SHOULD. Status: Locked. Dependencies: LRH-014, LRH-015. RICE: 3 × 2 × 0.8 / 1.5 = 3.2.
+Priority: SHOULD. Status: Planned. Dependencies: LRH-014, LRH-015. RICE: 3 × 2 × 0.8 / 1.5 = 3.2.
 
 Move notification child spawn, pipe serialization/write/flush, reap, and forced termination to a bounded controller worker. Associate commands and child responses with a ready-check generation so stale renderer output cannot authorize an action.
 
