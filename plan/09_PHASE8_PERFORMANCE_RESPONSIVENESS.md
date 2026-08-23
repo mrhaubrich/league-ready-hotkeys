@@ -4,6 +4,8 @@ Objective: remove plausibly user-visible latency and unnecessary continuous back
 
 Entry criteria: LRH-014 is complete with its required real-ready-check evidence or an explicitly accepted reproducible substitute. The Phase 7 automated validation remains green.
 
+Phase status: Active. Entry criteria satisfied on 2026-08-23 by LRH-014 automated evidence and the user's explicit confirmation of its remaining real Windows validation gate.
+
 Exit criteria:
 
 - Tray, notification, shortcut, and shutdown messages remain responsive while LCU discovery or network operations are slow or stalled.
@@ -18,7 +20,7 @@ Exit criteria:
 
 ## LRH-015 — Decouple LCU I/O from the Win32 message loop
 
-Priority: MUST. Status: Locked. Dependencies: LRH-014. RICE: 5 × 3 × 0.8 / 2 = 6.0.
+Priority: MUST. Status: Planned. Dependencies: LRH-014. RICE: 5 × 3 × 0.8 / 2 = 6.0.
 
 Move discovery and LCU HTTP work to a dedicated worker/runtime thread, report state and completions to the owner window, and configure measured loopback connection/read/total timeouts. Claim the existing action gate synchronously before dispatching an explicit action.
 
@@ -79,7 +81,7 @@ Validation: compare idle wakeups, context switches, CPU, input-to-dispatch laten
 
 ## LRH-019 — Make low-level hook callbacks bounded and allocation-free
 
-Priority: MUST. Status: Locked. Dependencies: LRH-014. RICE: 5 × 3 × 1.0 / 1.5 = 10.0.
+Priority: MUST. Status: Planned. Dependencies: LRH-014. RICE: 5 × 3 × 1.0 / 1.5 = 10.0.
 
 Precompile bindings into virtual-key/button values and modifier bitmasks, remove production console writes from hook callbacks, avoid per-event allocation and string normalization, minimize synchronization, and install only the keyboard/mouse hook types required by active bindings.
 
@@ -151,7 +153,7 @@ Validation: benchmark sanitized HTTP/event payloads and allocation counts before
 
 ## LRH-024 — Audit dependency and release footprint using measurements
 
-Priority: COULD. Status: Locked. Dependencies: LRH-014. RICE: 1 × 0.5 × 1.0 / 0.5 = 1.0.
+Priority: COULD. Status: Planned. Dependencies: LRH-014. RICE: 1 × 0.5 × 1.0 / 0.5 = 1.0.
 
 Measure crate contribution, cold start, private working set, and binary size. Remove only proven-unused direct dependencies and Windows feature groups; consolidate TLS implementations only if measurements show a material benefit without weakening LCU compatibility.
 

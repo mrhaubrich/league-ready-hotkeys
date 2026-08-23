@@ -1,6 +1,6 @@
 # Delivery plan
 
-Active phase: Phase 7 — Slint ready-check notification. Phase 8 is queued and locked until LRH-014 completes its validation gate.
+Active phase: Phase 8 — Performance and responsiveness. Phase 7 and LRH-014 are complete.
 
 Selection rule: choose the highest-RICE unblocked task in the active phase; dependencies, security gates, and human decisions always take precedence.
 
@@ -19,17 +19,17 @@ Selection rule: choose the highest-RICE unblocked task in the active phase; depe
 | LRH-011 | Add notification Accept/Decline buttons | MUST | Complete | LRH-010 |
 | LRH-012 | Add UI/tray status and notification preferences | SHOULD | Complete | LRH-010 |
 | LRH-013 | Add fully customizable keyboard/mouse shortcuts | SHOULD | Complete | LRH-009, LRH-012 |
-| LRH-014 | Migrate ready-check notification to Slint | SHOULD | Validation-required | LRH-010–013 |
-| LRH-015 | Decouple LCU I/O from the Win32 message loop | MUST | Locked | LRH-014 |
+| LRH-014 | Migrate ready-check notification to Slint | SHOULD | Complete | LRH-010–013 |
+| LRH-015 | Decouple LCU I/O from the Win32 message loop | MUST | Planned | LRH-014 |
 | LRH-016 | Cache League discovery state and reuse the HTTP client | MUST | Locked | LRH-015 |
 | LRH-017 | Combine ready-check events with reconciliation polling | SHOULD | Locked | LRH-015–016 |
 | LRH-018 | Replace the fixed 25 ms wake loop with message-driven waiting | SHOULD | Locked | LRH-015, LRH-017 |
-| LRH-019 | Make low-level hook callbacks bounded and allocation-free | MUST | Locked | LRH-014 |
+| LRH-019 | Make low-level hook callbacks bounded and allocation-free | MUST | Planned | LRH-014 |
 | LRH-020 | Keep ready-check monitoring alive during tray menus | MUST | Locked | LRH-015, LRH-017 |
 | LRH-021 | Move notification child process I/O and teardown off the message thread | SHOULD | Locked | LRH-014–015 |
 | LRH-022 | Bound the low-level hook diagnostic runtime | COULD | Locked | LRH-019 |
 | LRH-023 | Remove unnecessary ready-check JSON copies | COULD | Locked | LRH-016–017 |
-| LRH-024 | Audit dependency and release footprint using measurements | COULD | Locked | LRH-014 |
+| LRH-024 | Audit dependency and release footprint using measurements | COULD | Planned | LRH-014 |
 
 Locked tasks require a concrete dependency completion and recorded validation evidence. Handoffs include changed files, tests run, failures, assumptions, and plan status updates.
 
@@ -47,6 +47,6 @@ Compilation alone never satisfies the gate. A task remains `Validation-required`
 
 Phase 5 selection: LRH-009 first, then LRH-010. LRH-011 and LRH-012 remain locked until the notification window is integrated and tested.
 
-Phase 7 selection: LRH-014 after LRH-013 validation. The migration must preserve the verified LCU timer contract, explicit user action, and low idle-memory behavior.
+Phase 7 completion: LRH-014 passed automated diagnostics and release checks, and the user explicitly confirmed the remaining real Windows validation gate on 2026-08-23.
 
-Phase 8 selection: after LRH-014 completes, select the highest-RICE unblocked task from LRH-015–LRH-024. Correctness, explicit-action safety, cleanup, credential secrecy, and validation dependencies override score. JSON and dependency work remains measurement-gated and is skipped when benefit is immaterial.
+Phase 8 selection: LRH-019 is the highest-RICE unblocked task; LRH-015 and LRH-024 are also unblocked. Correctness, explicit-action safety, cleanup, credential secrecy, and validation dependencies override score. JSON and dependency work remains measurement-gated and is skipped when benefit is immaterial.
