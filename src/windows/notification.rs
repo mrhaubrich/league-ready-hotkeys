@@ -111,6 +111,10 @@ fn remaining_seconds(elapsed: f32) -> f32 {
     (READY_CHECK_DURATION_SECS - elapsed).clamp(0.0, READY_CHECK_DURATION_SECS)
 }
 
+fn keycap_width(key: &str) -> i32 {
+    (key.chars().count() as i32 * 8 + 18).max(32)
+}
+
 impl ReadyCheckNotification {
     pub fn new(_owner: HWND, accept: &ShortcutBinding, decline: &ShortcutBinding) -> Result<Self> {
         let class = windows::core::w!("LeagueReadyHotkeysNotification");
@@ -219,45 +223,61 @@ unsafe fn draw_binding(
     area: RECT,
     visual: &BindingVisual,
 ) {
-    let key_fill = CreateSolidBrush(rgb(11, 22, 30));
-    let key_border = CreatePen(PS_SOLID, 1, rgb(95, 111, 119));
-    let old_pen = SelectObject(hdc, key_border);
-    let old_brush = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    let key_fill = rgb(16, 31, 41);
+    let shadow = rgb(3, 8, 12);
     match visual {
         BindingVisual::Keys(keys) => {
-            let widths = keys
-                .iter()
-                .map(|key| (key.chars().count() as i32 * 7 + 16).max(28))
-                .collect::<Vec<_>>();
+            let widths = keys.iter().map(|key| keycap_width(key)).collect::<Vec<_>>();
             let total = widths.iter().sum::<i32>() + (widths.len().saturating_sub(1) as i32 * 5);
             let mut left = area.left + ((area.right - area.left - total).max(0) / 2);
-            for (key, width) in keys.iter().zip(widths) {
+            for (index, (key, width)) in keys.iter().zip(widths).enumerate() {
                 let right = (left + width).min(area.right);
-                let _ = RoundRect(hdc, left, area.top, right, area.bottom, 7, 7);
-                let key_region =
-                    CreateRoundRectRgn(left + 1, area.top + 1, right, area.bottom, 7, 7);
-                let _ = FillRgn(hdc, key_region, HBRUSH(key_fill.0));
-                let _ = DeleteObject(key_region);
+                let key_rect = RECT {
+                    left,
+                    top: area.top,
+                    right,
+                    bottom: area.bottom,
+                };
+                fill_round_rect(
+                    hdc,
+                    RECT {
+                        top: area.top + 2,
+                        bottom: area.bottom + 2,
+                        ..key_rect
+                    },
+                    6,
+                    shadow,
+                );
+                fill_round_rect(hdc, key_rect, 6, key_fill);
+                outline_round_rect(
+                    hdc,
+                    key_rect,
+                    6,
+                    if index + 1 == keys.len() {
+                        rgb(200, 155, 60)
+                    } else {
+                        rgb(90, 111, 119)
+                    },
+                    1,
+                );
                 let mut text = format!("{key}\0").encode_utf16().collect::<Vec<_>>();
                 let _ = DrawTextW(
                     hdc,
                     &mut text,
                     &mut RECT {
                         left,
-                        top: area.top,
                         right,
-                        bottom: area.bottom,
+                        ..key_rect
                     },
-                    DT_CENTER | DT_VCENTER | windows::Win32::Graphics::Gdi::DT_SINGLELINE,
+                    DT_CENTER
+                        | DT_VCENTER
+                        | DT_SINGLELINE
+                        | windows::Win32::Graphics::Gdi::DT_NOPREFIX,
                 );
                 left = right + 5;
             }
         }
     }
-    let _ = SelectObject(hdc, old_brush);
-    let _ = SelectObject(hdc, old_pen);
-    let _ = DeleteObject(key_border);
-    let _ = DeleteObject(key_fill);
 }
 
 unsafe fn create_font(height: i32, weight: u32) -> windows::Win32::Graphics::Gdi::HFONT {
@@ -494,9 +514,9 @@ unsafe extern "system" fn notification_proc(
                 hdc,
                 RECT {
                     left: ACCEPT_RECT.left + 12,
-                    top: 145,
+                    top: 143,
                     right: ACCEPT_RECT.right - 12,
-                    bottom: 173,
+                    bottom: 175,
                 },
                 &state.accept,
             );
@@ -504,9 +524,9 @@ unsafe extern "system" fn notification_proc(
                 hdc,
                 RECT {
                     left: DECLINE_RECT.left + 10,
-                    top: 145,
+                    top: 143,
                     right: DECLINE_RECT.right - 10,
-                    bottom: 173,
+                    bottom: 175,
                 },
                 &state.decline,
             );
@@ -615,5 +635,12 @@ mod tests {
         assert_eq!(remaining_seconds(5.0), 7.0);
         assert_eq!(remaining_seconds(12.0), 0.0);
         assert_eq!(remaining_seconds(20.0), 0.0);
+    }
+
+    #[test]
+    fn keycaps_have_consistent_readable_widths() {
+        assert_eq!(keycap_width("P"), 32);
+        assert_eq!(keycap_width("MB4"), 42);
+        assert_eq!(keycap_width("Shift"), 58);
     }
 }
