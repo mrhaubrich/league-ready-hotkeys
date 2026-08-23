@@ -81,7 +81,7 @@ Validation: compare idle wakeups, context switches, CPU, input-to-dispatch laten
 
 ## LRH-019 — Make low-level hook callbacks bounded and allocation-free
 
-Priority: MUST. Status: Validation-required. Dependencies: LRH-014. RICE: 5 × 3 × 1.0 / 1.5 = 10.0.
+Priority: MUST. Status: Complete. Dependencies: LRH-014. RICE: 5 × 3 × 1.0 / 1.5 = 10.0.
 
 Precompile bindings into virtual-key/button values and modifier bitmasks, remove production console writes from hook callbacks, avoid per-event allocation and string normalization, minimize synchronization, and install only the keyboard/mouse hook types required by active bindings.
 
@@ -98,7 +98,7 @@ Implementation evidence (2026-08-23): configured bindings are compiled once into
 
 Executable validation: four binding/device/timing tests plus the fast-rejection test cover legacy matching equivalence, keyboard-only, mouse-only, mixed-device selection, timing reset, and unrelated-key behavior. The credential-free shortcut diagnostic now installs the configured device hooks, replaces them once, verifies the observed hook types, and proves final cleanup. Automated evidence: Rustfmt passed; all 40 tests passed; Clippy passed with warnings denied; an isolated optimized release build passed without interrupting the user's running utility; `target\lrh019\release\league-ready-hotkeys.exe --check-shortcuts` printed `configured hooks keyboard=true mouse=false replaced and released` for the current F1/F2 configuration. Source inspection confirms neither low-level callback contains `Vec`, string conversion, mutex locking, or logging.
 
-Remaining validation: run `--check-input-hook` under sustained real keyboard input and record its callback histogram, then restart the optimized background utility and repeat safe Accept/Decline exactly-once checks, outside-ready-check inactivity, and hook cleanup after action, League disconnect, and tray shutdown. LRH-019 remains `Validation-required` until that real Windows scenario is confirmed.
+Validation evidence (2026-08-23): after the automated evidence above, the user ran the requested real Windows sustained-input and ready-check validation and explicitly confirmed that everything worked. This closes the callback responsiveness, explicit Accept/Decline, outside-ready-check inactivity, and cleanup regression gate. LRH-019 is complete.
 
 ## LRH-020 — Keep ready-check monitoring alive during tray menus
 
@@ -131,7 +131,7 @@ Validation: use a test child that stops reading and ignores `Close`; measure UI/
 
 ## LRH-022 — Bound the low-level hook diagnostic runtime
 
-Priority: COULD. Status: Locked. Dependencies: LRH-019. RICE: 1 × 1 × 1.0 / 0.5 = 2.0.
+Priority: COULD. Status: Planned. Dependencies: LRH-019. RICE: 1 × 1 × 1.0 / 0.5 = 2.0.
 
 Replace the diagnostic's indefinitely blocking `GetMessageW` wait with a timer or timed message wait that observes the documented deadline without user input.
 
