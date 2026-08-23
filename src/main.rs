@@ -30,11 +30,7 @@ fn main() {
         return;
     }
     if mode == Some("--check-shortcuts") {
-        let config = league_ready_hotkeys::windows::startup::load_shortcuts();
-        println!(
-            "shortcuts: accept={:?} decline={:?}",
-            config.accept, config.decline
-        );
+        run_shortcut_diagnostic();
         return;
     }
     if mode == Some("--set-shortcuts") {
@@ -654,6 +650,52 @@ fn run_hotkey_diagnostic() {
         std::thread::sleep(Duration::from_millis(25));
     }
     println!("F1/F2 diagnostic complete; bindings released");
+}
+
+#[cfg(windows)]
+fn run_shortcut_diagnostic() {
+    use windows::Win32::Foundation::HWND;
+
+    let (accept, decline) = league_ready_hotkeys::windows::startup::load_bindings();
+    if league_ready_hotkeys::shortcuts::ShortcutBindings::new(accept.clone(), decline.clone())
+        .is_err()
+    {
+        eprintln!("configured bindings collide; diagnostic refused to register them");
+        std::process::exit(1);
+    }
+    if league_ready_hotkeys::shortcuts::ShortcutBinding::parse("Win+F3").is_ok() {
+        eprintln!("reserved-key validation failed");
+        std::process::exit(1);
+    }
+
+    let mut manager =
+        league_ready_hotkeys::windows::hotkeys::HotkeyManager::new(HWND(std::ptr::null_mut()));
+    if let Err(error) = manager.set_enabled(true) {
+        eprintln!("could not register temporary F1/F2 diagnostic bindings: {error}");
+        std::process::exit(1);
+    }
+    if !manager.is_enabled() {
+        eprintln!("registration state did not become active");
+        std::process::exit(1);
+    }
+    if let Err(error) = manager.set_enabled(false) {
+        eprintln!("could not release temporary diagnostic bindings: {error}");
+        std::process::exit(1);
+    }
+    if manager.is_enabled() {
+        eprintln!("cleanup state remained active");
+        std::process::exit(1);
+    }
+    if !league_ready_hotkeys::windows::input_hooks::install() {
+        eprintln!("could not install temporary configured input hooks");
+        std::process::exit(1);
+    }
+    league_ready_hotkeys::windows::input_hooks::uninstall();
+    println!(
+        "shortcut diagnostic passed: accept={} decline={}; reserved Win bindings rejected; temporary registrations and configured hooks released",
+        accept.canonical(),
+        decline.canonical()
+    );
 }
 
 #[cfg(windows)]

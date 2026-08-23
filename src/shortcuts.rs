@@ -23,12 +23,20 @@ pub struct ShortcutBinding {
     pub input: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShortcutBindings {
     pub accept: ShortcutBinding,
     pub decline: ShortcutBinding,
 }
 
 impl ShortcutBindings {
+    pub fn new(accept: ShortcutBinding, decline: ShortcutBinding) -> Result<Self, ShortcutError> {
+        if accept == decline {
+            return Err(ShortcutError::Duplicate);
+        }
+        Ok(Self { accept, decline })
+    }
+
     pub fn action_for_keyboard(
         &self,
         virtual_key: u32,
@@ -86,6 +94,9 @@ impl ShortcutBinding {
             let normalized = modifier.to_ascii_lowercase();
             if !matches!(normalized.as_str(), "ctrl" | "alt" | "shift" | "win") {
                 return Err(ShortcutError::Unsupported(value.to_owned()));
+            }
+            if normalized == "win" {
+                return Err(ShortcutError::Reserved);
             }
             if modifiers.contains(&normalized) {
                 return Err(ShortcutError::Duplicate);
@@ -263,6 +274,8 @@ pub enum ShortcutError {
     Unsupported(String),
     #[error("accept and decline shortcuts must differ")]
     Duplicate,
+    #[error("Windows-logo-key shortcuts are reserved by the operating system")]
+    Reserved,
 }
 
 #[cfg(test)]
@@ -326,10 +339,11 @@ mod tests {
     }
     #[test]
     fn maps_events_to_distinct_actions() {
-        let bindings = ShortcutBindings {
-            accept: ShortcutBinding::parse("Ctrl+C").unwrap(),
-            decline: ShortcutBinding::parse("Mouse4").unwrap(),
-        };
+        let bindings = ShortcutBindings::new(
+            ShortcutBinding::parse("Ctrl+C").unwrap(),
+            ShortcutBinding::parse("Mouse4").unwrap(),
+        )
+        .unwrap();
         assert_eq!(
             bindings.action_for_keyboard('C' as u32, &["ctrl"]),
             Some(HotkeyAction::Accept)
@@ -337,6 +351,23 @@ mod tests {
         assert_eq!(
             bindings.action_for_mouse("Mouse4"),
             Some(HotkeyAction::Decline)
+        );
+    }
+
+    #[test]
+    fn rejects_reserved_windows_shortcuts() {
+        assert_eq!(
+            ShortcutBinding::parse("Win+F3"),
+            Err(ShortcutError::Reserved)
+        );
+    }
+
+    #[test]
+    fn rejects_identical_binding_pair() {
+        let binding = ShortcutBinding::parse("Ctrl+F3").unwrap();
+        assert_eq!(
+            ShortcutBindings::new(binding.clone(), binding),
+            Err(ShortcutError::Duplicate)
         );
     }
 }

@@ -329,10 +329,10 @@ pub fn load_bindings() -> (ShortcutBinding, ShortcutBinding) {
         let _ = RegCloseKey(handle);
     }
     match result.and_then(|(a, d)| {
-        Some((
-            ShortcutBinding::parse(&a).ok()?,
-            ShortcutBinding::parse(&d).ok()?,
-        ))
+        let accept = ShortcutBinding::parse(&a).ok()?;
+        let decline = ShortcutBinding::parse(&d).ok()?;
+        crate::shortcuts::ShortcutBindings::new(accept.clone(), decline.clone()).ok()?;
+        Some((accept, decline))
     }) {
         Some(pair) => pair,
         None => (

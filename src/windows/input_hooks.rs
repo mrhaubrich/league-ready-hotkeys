@@ -30,7 +30,17 @@ pub fn install() -> bool {
             .unwrap_or_default();
         MOUSE_HOOK = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), HINSTANCE::default(), 0)
             .unwrap_or_default();
-        !KEY_HOOK.0.is_null() && !MOUSE_HOOK.0.is_null()
+        if !KEY_HOOK.0.is_null() && !MOUSE_HOOK.0.is_null() {
+            return true;
+        }
+        let _ = UnhookWindowsHookEx(KEY_HOOK);
+        let _ = UnhookWindowsHookEx(MOUSE_HOOK);
+        KEY_HOOK = HHOOK(std::ptr::null_mut());
+        MOUSE_HOOK = HHOOK(std::ptr::null_mut());
+        if let Ok(mut bindings) = BINDINGS.lock() {
+            *bindings = None;
+        }
+        false
     }
 }
 pub fn uninstall() {

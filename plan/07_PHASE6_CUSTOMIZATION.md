@@ -16,7 +16,7 @@ Exit criteria:
 
 ## LRH-013 — Add configurable accept/decline shortcuts
 
-Priority: SHOULD. Status: Planned. Dependencies: LRH-009, LRH-012.
+Priority: SHOULD. Status: Complete. Dependencies: LRH-009, LRH-012.
 
 Add a shortcut configuration model and registry-backed persistence. Extend the tray UI with a capture flow that records the next keyboard or mouse input. Use `RegisterHotKey` where possible and narrowly scoped low-level keyboard/mouse hooks for combinations and mouse buttons that cannot be represented by `RegisterHotKey`. Validate modifier/key combinations, prevent Accept and Decline collisions, unregister old bindings before applying new ones, and fall back safely to F1/F2 if stored settings are malformed.
 
@@ -35,7 +35,7 @@ Validation:
 - Add a diagnostic command such as `--check-shortcuts` that prints sanitized configured bindings and exercises registration/unregistration.
 - Manually configure, restart, enter a safe ready check, and validate both actions.
 
-Implementation evidence (2026-08-23): the ready-check notification reads persisted arbitrary bindings and renders keyboard combinations as individual keycaps and mouse bindings as matching `MB4`/`MB5` keycaps. The tray exposes `Configure hotkeys...`; its settings surface is now a Slint Fluent-dark window on a dedicated UI event loop, with full clickable action cards, keyboard/mouse capture, collision validation, staged Save/Cancel behavior, registry persistence, tray reopen after close, and live notification refresh. Automated checks passed: Rustfmt, 29 tests, Clippy with warnings denied, debug build, and `git diff --check`. The `--check-settings` runtime diagnostic created a responsive top-level `Configure hotkeys` window and a captured render verified the Fluent layout and native system frame. Final user-run capture/restart/ready-check action validation is still required, so LRH-013 remains Planned.
+Implementation evidence (2026-08-23): the ready-check notification reads persisted arbitrary bindings and renders keyboard combinations as individual keycaps and mouse bindings as matching `MB4`/`MB5` keycaps. The tray exposes `Configure hotkeys...`; its settings surface is now a Slint Fluent-dark window on a dedicated UI event loop, with full clickable action cards, keyboard/mouse capture, collision validation, staged Save/Cancel behavior, registry persistence, tray reopen after close, and live notification refresh. `--check-shortcuts` is a credential-free diagnostic: it validates the saved non-colliding pair, confirms Windows-logo-key bindings are rejected as reserved, temporarily registers and releases F1/F2 plus the configured low-level hooks, and never contacts League. The registration seam has deterministic automated rollback coverage: a failed second registration unregisters the first. Automated checks passed: Rustfmt, 35 tests, Clippy with warnings denied, debug build, `git diff --check`, and `cargo run -- --check-shortcuts` printed `shortcut diagnostic passed: accept=F1 decline=F2; reserved Win bindings rejected; temporary registrations and configured hooks released`. Real-client evidence: the user configured and restarted the release application, entered safe ready checks, and confirmed that configured Accept and Decline each sent exactly one action, shortcuts did nothing outside a ready check, and hooks disappeared after an action, League disconnect, and tray shutdown. LRH-013 is complete.
 
 Risks:
 
