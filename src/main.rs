@@ -2,6 +2,17 @@
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mode = args.get(1).map(String::as_str);
+    if mode == Some("--settings-window") {
+        let owner = args
+            .get(2)
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(0);
+        if let Err(error) = league_ready_hotkeys::windows::settings::run_window_process(owner) {
+            eprintln!("could not run Slint settings window: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if mode == Some("--check-hotkeys") {
         run_hotkey_diagnostic();
         return;
@@ -332,6 +343,9 @@ fn run_background() {
                 if active {
                     custom_hooks_active = league_ready_hotkeys::windows::input_hooks::install();
                 }
+            }
+            if message.message == league_ready_hotkeys::windows::settings::SETTINGS_CLOSED {
+                settings_window = None;
             }
             if message.message == WM_APP + 2 {
                 break 'background;

@@ -9,6 +9,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
 use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
 
 pub const SETTINGS_UPDATED: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 3;
+pub const SETTINGS_CLOSED: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 4;
 
 slint::slint! {
     import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
@@ -29,22 +30,26 @@ slint::slint! {
                 height: 76px; border-radius: 9px; background: #0d1c28; border-width: 1px; border-color: #274052;
                 TouchArea { clicked => { root.configure-accept(); } }
                 HorizontalLayout { padding-left: 18px; padding-right: 18px;
-                    Text { text: "Accept"; color: #f0e6d2; font-size: 17px; vertical-alignment: center; }
-                    Rectangle { horizontal-stretch: 1; }
+                    Rectangle { horizontal-stretch: 1;
+                        Text { text: "Accept"; color: #f0e6d2; font-size: 17px; horizontal-alignment: left; vertical-alignment: center; }
+                    }
                     Rectangle { width: 110px; height: 38px; border-radius: 6px; background: #09131d; border-width: 1px; border-color: #0ac8b9;
                         Text { text: root.accept-binding; color: white; font-size: 15px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
                     }
+                    Rectangle { horizontal-stretch: 1; }
                 }
             }
             Rectangle {
                 height: 76px; border-radius: 9px; background: #0d1c28; border-width: 1px; border-color: #274052;
                 TouchArea { clicked => { root.configure-decline(); } }
                 HorizontalLayout { padding-left: 18px; padding-right: 18px;
-                    Text { text: "Decline"; color: #f0e6d2; font-size: 17px; vertical-alignment: center; }
-                    Rectangle { horizontal-stretch: 1; }
+                    Rectangle { horizontal-stretch: 1;
+                        Text { text: "Decline"; color: #f0e6d2; font-size: 17px; horizontal-alignment: left; vertical-alignment: center; }
+                    }
                     Rectangle { width: 110px; height: 38px; border-radius: 6px; background: #09131d; border-width: 1px; border-color: #5b7182;
                         Text { text: root.decline-binding; color: white; font-size: 15px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
                     }
+                    Rectangle { horizontal-stretch: 1; }
                 }
             }
             Rectangle { vertical-stretch: 1; }
@@ -64,78 +69,72 @@ struct State {
     previous: [bool; 256],
 }
 pub struct HotkeySettings {
-    window: slint::Weak<SettingsWindow>,
-    thread: Option<std::thread::JoinHandle<()>>,
+    child: RefCell<std::process::Child>,
 }
 
 impl HotkeySettings {
     pub fn new(owner: HWND) -> Result<Self> {
-        let owner_value = owner.0 as usize;
-        let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
-        let thread = std::thread::spawn(move || {
-            std::env::set_var("SLINT_STYLE", "fluent-dark");
-            let result = (|| -> std::result::Result<_, String> {
-                let window = SettingsWindow::new().map_err(|e| e.to_string())?;
-                let owner = HWND(owner_value as *mut std::ffi::c_void);
-                let (accept, decline) = crate::windows::startup::load_bindings();
-                let state = Rc::new(RefCell::new(State {
-                    owner,
-                    accept,
-                    decline,
-                    target: 0,
-                    previous: [false; 256],
-                }));
-                refresh(
-                    &window,
-                    &state.borrow(),
-                    "Choose an action to change its shortcut",
-                    false,
-                );
-                let timer = Timer::default();
-                wire_capture(&window, &state, &timer);
-                wire_actions(&window, &state);
-                window
-                    .window()
-                    .on_close_requested(|| CloseRequestResponse::HideWindow);
-                window.show().map_err(|e| e.to_string())?;
-                let weak = window.as_weak();
-                ready_tx.send(Ok(weak)).map_err(|e| e.to_string())?;
-                let _keep_alive = (window, state, timer);
-                slint::run_event_loop().map_err(|e| e.to_string())?;
-                Ok(())
-            })();
-            if let Err(error) = result {
-                eprintln!("Slint settings event loop failed: {error}");
-                let _ = ready_tx.send(Err(error));
-            }
-        });
-        let window = ready_rx
-            .recv()
-            .map_err(|e| Error::new(E_FAIL, e.to_string()))?
-            .map_err(|e| Error::new(E_FAIL, e))?;
+        use std::os::windows::process::CommandExt;
+        let child = std::process::Command::new(std::env::current_exe().map_err(io_error)?)
+            .arg("--settings-window")
+            .arg((owner.0 as usize).to_string())
+            .creation_flags(0x08000000)
+            .spawn()
+            .map_err(io_error)?;
         Ok(Self {
-            window,
-            thread: Some(thread),
+            child: RefCell::new(child),
         })
     }
-    pub fn show(&self) {
-        let weak = self.window.clone();
-        let _ = slint::invoke_from_event_loop(move || {
-            if let Some(window) = weak.upgrade() {
-                let _ = window.show();
-                window.window().request_redraw();
-            }
-        });
-    }
+    pub fn show(&self) {}
 }
 
 impl Drop for HotkeySettings {
     fn drop(&mut self) {
-        let _ = slint::quit_event_loop();
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
+        let child = self.child.get_mut();
+        if child.try_wait().ok().flatten().is_none() {
+            let _ = child.kill();
+            let _ = child.wait();
         }
     }
+}
+
+pub fn run_window_process(owner_value: usize) -> Result<()> {
+    std::env::set_var("SLINT_STYLE", "fluent-dark");
+    let owner = HWND(owner_value as *mut std::ffi::c_void);
+    let window = SettingsWindow::new().map_err(platform_error)?;
+    let (accept, decline) = crate::windows::startup::load_bindings();
+    let state = Rc::new(RefCell::new(State {
+        owner,
+        accept,
+        decline,
+        target: 0,
+        previous: [false; 256],
+    }));
+    refresh(
+        &window,
+        &state.borrow(),
+        "Choose an action to change its shortcut",
+        false,
+    );
+    let timer = Timer::default();
+    wire_capture(&window, &state, &timer);
+    wire_actions(&window, &state);
+    window.window().on_close_requested(move || {
+        unsafe {
+            let _ = PostMessageW(owner, SETTINGS_CLOSED, WPARAM(0), LPARAM(0));
+        }
+        let _ = slint::quit_event_loop();
+        CloseRequestResponse::HideWindow
+    });
+    window.show().map_err(platform_error)?;
+    slint::run_event_loop().map_err(platform_error)
+}
+
+fn platform_error(error: slint::PlatformError) -> Error {
+    Error::new(E_FAIL, error.to_string())
+}
+fn io_error(error: std::io::Error) -> Error {
+    Error::new(E_FAIL, error.to_string())
 }
 
 fn wire_capture(window: &SettingsWindow, state: &Rc<RefCell<State>>, timer: &Timer) {
