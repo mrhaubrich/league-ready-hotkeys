@@ -1,543 +1,286 @@
 #![cfg(windows)]
 
 use crate::shortcuts::ShortcutBinding;
-use std::ffi::c_void;
-use windows::core::Result;
-use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
-use windows::Win32::Graphics::Dwm::{
-    DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE,
-    DWMWCP_ROUND, DWM_WINDOW_CORNER_PREFERENCE,
-};
-use windows::Win32::Graphics::Gdi::{
-    BeginPaint, CreateSolidBrush, DeleteObject, DrawTextW, EndPaint, FillRect, InvalidateRect,
-    SetBkMode, SetTextColor, DT_CENTER, DT_SINGLELINE, DT_VCENTER, HBRUSH, PAINTSTRUCT,
-    TRANSPARENT,
-};
-use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, ReleaseCapture, SetFocus};
-use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, GetClientRect, GetWindowLongPtrW, IsZoomed,
-    KillTimer, PostMessageW, RegisterClassW, SendMessageW, SetForegroundWindow, SetTimer,
-    SetWindowLongPtrW, ShowWindow, CS_HREDRAW, CS_VREDRAW, GWLP_USERDATA, HTCAPTION, SW_HIDE,
-    SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SW_SHOW, WM_CLOSE, WM_LBUTTONDOWN, WM_NCHITTEST,
-    WM_PAINT, WM_TIMER, WNDCLASSW, WS_POPUP, WS_THICKFRAME,
-};
+use slint::{CloseRequestResponse, ComponentHandle, SharedString, Timer, TimerMode};
+use std::{cell::RefCell, rc::Rc, time::Duration};
+use windows::core::{Error, Result};
+use windows::Win32::Foundation::{E_FAIL, HWND, LPARAM, WPARAM};
+use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
+use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
 
 pub const SETTINGS_UPDATED: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 3;
 
-const ACCEPT_ZONE: RECT = RECT {
-    left: 24,
-    top: 76,
-    right: 276,
-    bottom: 122,
-};
-const DECLINE_ZONE: RECT = RECT {
-    left: 24,
-    top: 136,
-    right: 276,
-    bottom: 182,
-};
-const SAVE_ZONE: RECT = RECT {
-    left: 190,
-    top: 210,
-    right: 276,
-    bottom: 246,
-};
-const CANCEL_ZONE: RECT = RECT {
-    left: 24,
-    top: 210,
-    right: 170,
-    bottom: 246,
-};
-const TITLEBAR_HEIGHT: i32 = 34;
-const CLOSE_ZONE: RECT = RECT {
-    left: 340,
-    top: 0,
-    right: 380,
-    bottom: 34,
-};
-const MAX_ZONE: RECT = RECT {
-    left: 300,
-    top: 0,
-    right: 340,
-    bottom: 34,
-};
-const MIN_ZONE: RECT = RECT {
-    left: 260,
-    top: 0,
-    right: 300,
-    bottom: 34,
-};
-
-pub struct HotkeySettings {
-    hwnd: HWND,
-    state: Box<SettingsState>,
+slint::slint! {
+    import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
+    export component SettingsWindow inherits Window {
+        title: "Configure hotkeys"; width: 460px; height: 390px;
+        background: #07111b;
+        in property<string> accept-binding;
+        in property<string> decline-binding;
+        in property<string> status-message;
+        in property<bool> dirty;
+        callback configure-accept(); callback configure-decline(); callback save(); callback cancel();
+        VerticalBox {
+            padding: 28px; spacing: 16px;
+            Text { text: "LEAGUE READY HOTKEYS"; color: #c89b3c; font-size: 13px; font-weight: 700; }
+            Text { text: "Configure hotkeys"; color: #f0e6d2; font-size: 25px; font-weight: 700; }
+            Text { text: root.status-message; color: #9aa7b4; font-size: 14px; }
+            Rectangle {
+                height: 76px; border-radius: 9px; background: #0d1c28; border-width: 1px; border-color: #274052;
+                TouchArea { clicked => { root.configure-accept(); } }
+                HorizontalLayout { padding-left: 18px; padding-right: 18px;
+                    Text { text: "Accept"; color: #f0e6d2; font-size: 17px; vertical-alignment: center; }
+                    Rectangle { horizontal-stretch: 1; }
+                    Rectangle { width: 110px; height: 38px; border-radius: 6px; background: #09131d; border-width: 1px; border-color: #0ac8b9;
+                        Text { text: root.accept-binding; color: white; font-size: 15px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+            }
+            Rectangle {
+                height: 76px; border-radius: 9px; background: #0d1c28; border-width: 1px; border-color: #274052;
+                TouchArea { clicked => { root.configure-decline(); } }
+                HorizontalLayout { padding-left: 18px; padding-right: 18px;
+                    Text { text: "Decline"; color: #f0e6d2; font-size: 17px; vertical-alignment: center; }
+                    Rectangle { horizontal-stretch: 1; }
+                    Rectangle { width: 110px; height: 38px; border-radius: 6px; background: #09131d; border-width: 1px; border-color: #5b7182;
+                        Text { text: root.decline-binding; color: white; font-size: 15px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+            }
+            Rectangle { vertical-stretch: 1; }
+            HorizontalBox { spacing: 12px; Rectangle { horizontal-stretch: 1; }
+                Button { text: "Cancel"; clicked => { root.cancel(); } }
+                Button { text: root.dirty ? "Save changes" : "Saved"; enabled: root.dirty; clicked => { root.save(); } }
+            }
+        }
+    }
 }
 
-struct SettingsState {
+struct State {
     owner: HWND,
     accept: ShortcutBinding,
     decline: ShortcutBinding,
-    capture_target: u32,
+    target: u8,
     previous: [bool; 256],
-    message: String,
-    dirty: bool,
+}
+pub struct HotkeySettings {
+    window: slint::Weak<SettingsWindow>,
+    thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl HotkeySettings {
     pub fn new(owner: HWND) -> Result<Self> {
-        let class = windows::core::w!("LeagueReadyHotkeysSettings");
-        unsafe {
-            let _ = RegisterClassW(&WNDCLASSW {
-                lpfnWndProc: Some(settings_proc),
-                hInstance: GetModuleHandleW(None)?.into(),
-                lpszClassName: class,
-                style: CS_HREDRAW | CS_VREDRAW,
-                ..Default::default()
-            });
-        }
-        let hwnd = unsafe {
-            CreateWindowExW(
-                Default::default(),
-                class,
-                windows::core::w!("Configure hotkeys"),
-                WS_POPUP | WS_THICKFRAME,
-                0,
-                0,
-                380,
-                314,
-                None,
-                None,
-                None,
-                None,
-            )?
-        };
-        let (accept, decline) = crate::windows::startup::load_bindings();
-        let state = Box::new(SettingsState {
-            owner,
-            accept,
-            decline,
-            capture_target: 0,
-            previous: [false; 256],
-            message: "Choose an action, then press a key or mouse button".to_owned(),
-            dirty: false,
+        let owner_value = owner.0 as usize;
+        let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
+        let thread = std::thread::spawn(move || {
+            std::env::set_var("SLINT_STYLE", "fluent-dark");
+            let result = (|| -> std::result::Result<_, String> {
+                let window = SettingsWindow::new().map_err(|e| e.to_string())?;
+                let owner = HWND(owner_value as *mut std::ffi::c_void);
+                let (accept, decline) = crate::windows::startup::load_bindings();
+                let state = Rc::new(RefCell::new(State {
+                    owner,
+                    accept,
+                    decline,
+                    target: 0,
+                    previous: [false; 256],
+                }));
+                refresh(
+                    &window,
+                    &state.borrow(),
+                    "Choose an action to change its shortcut",
+                    false,
+                );
+                let timer = Timer::default();
+                wire_capture(&window, &state, &timer);
+                wire_actions(&window, &state);
+                window
+                    .window()
+                    .on_close_requested(|| CloseRequestResponse::HideWindow);
+                window.show().map_err(|e| e.to_string())?;
+                let weak = window.as_weak();
+                ready_tx.send(Ok(weak)).map_err(|e| e.to_string())?;
+                let _keep_alive = (window, state, timer);
+                slint::run_event_loop().map_err(|e| e.to_string())?;
+                Ok(())
+            })();
+            if let Err(error) = result {
+                eprintln!("Slint settings event loop failed: {error}");
+                let _ = ready_tx.send(Err(error));
+            }
         });
-        unsafe {
-            let dark_mode = windows::Win32::Foundation::BOOL(1);
-            let _ = DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_USE_IMMERSIVE_DARK_MODE,
-                (&dark_mode as *const windows::Win32::Foundation::BOOL).cast::<c_void>(),
-                std::mem::size_of_val(&dark_mode) as u32,
-            );
-            let corners = DWMWCP_ROUND;
-            let _ = DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_WINDOW_CORNER_PREFERENCE,
-                (&corners as *const DWM_WINDOW_CORNER_PREFERENCE).cast::<c_void>(),
-                std::mem::size_of_val(&corners) as u32,
-            );
-            SetWindowLongPtrW(hwnd, GWLP_USERDATA, (&raw const *state) as isize);
-            let _ = ShowWindow(hwnd, SW_SHOW);
-            let _ = SetForegroundWindow(hwnd);
-        }
-        Ok(Self { hwnd, state })
+        let window = ready_rx
+            .recv()
+            .map_err(|e| Error::new(E_FAIL, e.to_string()))?
+            .map_err(|e| Error::new(E_FAIL, e))?;
+        Ok(Self {
+            window,
+            thread: Some(thread),
+        })
     }
-
     pub fn show(&self) {
-        unsafe {
-            let _ = ShowWindow(self.hwnd, SW_SHOW);
-            let _ = SetForegroundWindow(self.hwnd);
-            let _ = SetFocus(self.hwnd);
-        }
+        let weak = self.window.clone();
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(window) = weak.upgrade() {
+                let _ = window.show();
+                window.window().request_redraw();
+            }
+        });
     }
 }
 
 impl Drop for HotkeySettings {
     fn drop(&mut self) {
-        unsafe {
-            let _ = KillTimer(self.hwnd, 1);
-            SetWindowLongPtrW(self.hwnd, GWLP_USERDATA, 0);
-            let _ = DestroyWindow(self.hwnd);
+        let _ = slint::quit_event_loop();
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
         }
-        let _ = &self.state;
     }
 }
 
-fn in_zone(x: i32, y: i32, zone: RECT) -> bool {
-    (zone.left..=zone.right).contains(&x) && (zone.top..=zone.bottom).contains(&y)
+fn wire_capture(window: &SettingsWindow, state: &Rc<RefCell<State>>, timer: &Timer) {
+    let weak = window.as_weak();
+    let polling = Rc::clone(state);
+    timer.start(TimerMode::Repeated, Duration::from_millis(30), move || {
+        let Some(window) = weak.upgrade() else { return };
+        let mut state = polling.borrow_mut();
+        if state.target == 0 {
+            return;
+        }
+        for vk in candidates() {
+            let down = unsafe { GetAsyncKeyState(vk as i32) < 0 };
+            let old = state.previous[vk as usize];
+            state.previous[vk as usize] = down;
+            if !down || old {
+                continue;
+            }
+            let Some(value) = candidate_binding(vk) else {
+                continue;
+            };
+            let Ok(binding) = ShortcutBinding::parse(&value) else {
+                continue;
+            };
+            if (state.target == 1 && binding == state.decline)
+                || (state.target == 2 && binding == state.accept)
+            {
+                state.target = 0;
+                window.set_status_message("Shortcuts must be different".into());
+                return;
+            }
+            if state.target == 1 {
+                state.accept = binding;
+            } else {
+                state.decline = binding;
+            }
+            state.target = 0;
+            refresh(&window, &state, "Unsaved changes", true);
+            return;
+        }
+    });
+    let bind = |target, weak: slint::Weak<SettingsWindow>, state: Rc<RefCell<State>>| {
+        move || {
+            let mut state = state.borrow_mut();
+            state.target = target;
+            for vk in candidates() {
+                state.previous[vk as usize] = unsafe { GetAsyncKeyState(vk as i32) < 0 };
+            }
+            if let Some(w) = weak.upgrade() {
+                w.set_status_message("Listening… press a keyboard key or mouse button".into());
+            }
+        }
+    };
+    window.on_configure_accept(bind(1, window.as_weak(), Rc::clone(state)));
+    window.on_configure_decline(bind(2, window.as_weak(), Rc::clone(state)));
 }
 
-fn binding_label(binding: &ShortcutBinding) -> String {
+fn wire_actions(window: &SettingsWindow, state: &Rc<RefCell<State>>) {
+    let weak = window.as_weak();
+    let saved = Rc::clone(state);
+    window.on_save(move || {
+        let state = saved.borrow();
+        if crate::windows::startup::save_bindings(
+            &state.accept.canonical(),
+            &state.decline.canonical(),
+        )
+        .is_ok()
+        {
+            if let Some(w) = weak.upgrade() {
+                refresh(&w, &state, "Hotkeys saved", false);
+            }
+            unsafe {
+                let _ = PostMessageW(state.owner, SETTINGS_UPDATED, WPARAM(0), LPARAM(0));
+            }
+        }
+    });
+    let weak = window.as_weak();
+    let cancelled = Rc::clone(state);
+    window.on_cancel(move || {
+        let (accept, decline) = crate::windows::startup::load_bindings();
+        let mut state = cancelled.borrow_mut();
+        state.accept = accept;
+        state.decline = decline;
+        state.target = 0;
+        if let Some(w) = weak.upgrade() {
+            refresh(&w, &state, "Changes cancelled", false);
+        }
+    });
+}
+
+fn refresh(window: &SettingsWindow, state: &State, message: &str, dirty: bool) {
+    window.set_accept_binding(SharedString::from(label(&state.accept)));
+    window.set_decline_binding(SharedString::from(label(&state.decline)));
+    window.set_status_message(message.into());
+    window.set_dirty(dirty);
+}
+fn label(binding: &ShortcutBinding) -> String {
     binding.canonical().replace("MOUSE", "MB")
 }
-
-fn modifier_down(vk: i32) -> bool {
+fn down(vk: i32) -> bool {
     unsafe { GetAsyncKeyState(vk) < 0 }
 }
-
-fn capture_candidates() -> impl Iterator<Item = u32> {
-    let keyboard = (0x30..=0x39).chain(0x41..=0x5A).chain(0x70..=0x7B);
-    keyboard.chain([1, 2, 4, 5])
+fn candidates() -> impl Iterator<Item = u32> {
+    (0x30..=0x39)
+        .chain(0x41..=0x5a)
+        .chain(0x70..=0x7b)
+        .chain([1, 2, 4, 5])
 }
-
 fn candidate_binding(vk: u32) -> Option<String> {
-    let modifiers = [(0x11, "Ctrl"), (0x12, "Alt"), (0x10, "Shift")]
+    let mods = [(0x11, "Ctrl"), (0x12, "Alt"), (0x10, "Shift")]
         .into_iter()
-        .filter(|(key, _)| modifier_down(*key))
-        .map(|(_, name)| name)
-        .chain(if modifier_down(0x5B) || modifier_down(0x5C) {
+        .filter(|(k, _)| down(*k))
+        .map(|(_, n)| n)
+        .chain(if down(0x5b) || down(0x5c) {
             Some("Win")
         } else {
             None
         })
         .collect::<Vec<_>>();
     let input = match vk {
-        1 => "Mouse1".to_owned(),
-        2 => "Mouse2".to_owned(),
-        4 => "Mouse4".to_owned(),
-        5 => "Mouse5".to_owned(),
-        0x70..=0x7B => format!("F{}", vk - 0x6F),
-        0x30..=0x39 | 0x41..=0x5A => char::from_u32(vk)?.to_string(),
+        1 => "Mouse1".into(),
+        2 => "Mouse2".into(),
+        4 => "Mouse4".into(),
+        5 => "Mouse5".into(),
+        0x70..=0x7b => format!("F{}", vk - 0x6f),
+        0x30..=0x39 | 0x41..=0x5a => char::from_u32(vk)?.to_string(),
         _ => return None,
     };
-    Some(if modifiers.is_empty() {
+    Some(if mods.is_empty() {
         input
     } else {
-        format!("{}+{input}", modifiers.join("+"))
+        format!("{}+{input}", mods.join("+"))
     })
-}
-
-unsafe fn poll_capture(hwnd: HWND, state: &mut SettingsState) {
-    for vk in capture_candidates() {
-        let down = GetAsyncKeyState(vk as i32) < 0;
-        let was_down = state.previous[vk as usize];
-        state.previous[vk as usize] = down;
-        if !down || was_down {
-            continue;
-        }
-        let Some(value) = candidate_binding(vk) else {
-            continue;
-        };
-        let Ok(binding) = ShortcutBinding::parse(&value) else {
-            continue;
-        };
-        if (state.capture_target == 1 && binding == state.decline)
-            || (state.capture_target == 2 && binding == state.accept)
-        {
-            state.message = "Those shortcuts must be different".to_owned();
-            state.capture_target = 0;
-            let _ = KillTimer(hwnd, 1);
-            let _ = InvalidateRect(hwnd, None, false);
-            return;
-        }
-        if state.capture_target == 1 {
-            state.accept = binding;
-        } else {
-            state.decline = binding;
-        }
-        state.dirty = true;
-        state.message = "Unsaved changes. Click Save to apply them.".to_owned();
-        state.capture_target = 0;
-        let _ = KillTimer(hwnd, 1);
-        let _ = InvalidateRect(hwnd, None, false);
-        return;
-    }
-}
-
-unsafe extern "system" fn settings_proc(
-    hwnd: HWND,
-    message: u32,
-    _wparam: WPARAM,
-    lparam: LPARAM,
-) -> LRESULT {
-    let state_ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut SettingsState;
-    if message == WM_PAINT {
-        let mut paint = PAINTSTRUCT::default();
-        let hdc = BeginPaint(hwnd, &mut paint);
-        let background = CreateSolidBrush(COLORREF(0x00170f08));
-        let mut client = RECT::default();
-        let _ = GetClientRect(hwnd, &mut client);
-        let _ = FillRect(hdc, &client, HBRUSH(background.0));
-        let _ = DeleteObject(background);
-        let _ = SetBkMode(hdc, TRANSPARENT);
-        let _ = SetTextColor(hdc, COLORREF(0x00f0e6d2));
-        let title_brush = CreateSolidBrush(COLORREF(0x001d2733));
-        let title_rect = RECT {
-            left: 0,
-            top: 0,
-            right: client.right,
-            bottom: TITLEBAR_HEIGHT,
-        };
-        let _ = FillRect(hdc, &title_rect, HBRUSH(title_brush.0));
-        let _ = DeleteObject(title_brush);
-        let mut caption = "Configure hotkeys\0".encode_utf16().collect::<Vec<_>>();
-        let _ = DrawTextW(
-            hdc,
-            &mut caption,
-            &mut RECT {
-                left: 14,
-                top: 0,
-                right: 250,
-                bottom: TITLEBAR_HEIGHT,
-            },
-            DT_SINGLELINE | DT_VCENTER,
-        );
-        let mut close = "×\0".encode_utf16().collect::<Vec<_>>();
-        let mut max = "□\0".encode_utf16().collect::<Vec<_>>();
-        let mut min = "—\0".encode_utf16().collect::<Vec<_>>();
-        let _ = DrawTextW(
-            hdc,
-            &mut min,
-            &mut RECT {
-                left: 260,
-                top: 0,
-                right: 300,
-                bottom: TITLEBAR_HEIGHT,
-            },
-            DT_CENTER | DT_SINGLELINE | DT_VCENTER,
-        );
-        let _ = DrawTextW(
-            hdc,
-            &mut max,
-            &mut RECT {
-                left: 300,
-                top: 0,
-                right: 340,
-                bottom: TITLEBAR_HEIGHT,
-            },
-            DT_CENTER | DT_SINGLELINE | DT_VCENTER,
-        );
-        let _ = SetTextColor(hdc, COLORREF(0x00f06b6b));
-        let _ = DrawTextW(
-            hdc,
-            &mut close,
-            &mut RECT {
-                left: 340,
-                top: 0,
-                right: 380,
-                bottom: TITLEBAR_HEIGHT,
-            },
-            DT_CENTER | DT_SINGLELINE | DT_VCENTER,
-        );
-        if let Some(state) = state_ptr.as_ref() {
-            let mut title = "CONFIGURE HOTKEYS\0".encode_utf16().collect::<Vec<_>>();
-            let mut instruction = format!("{}\0", state.message)
-                .encode_utf16()
-                .collect::<Vec<_>>();
-            let mut accept = format!("Accept:  {}\0", binding_label(&state.accept))
-                .encode_utf16()
-                .collect::<Vec<_>>();
-            let mut decline = format!("Decline: {}\0", binding_label(&state.decline))
-                .encode_utf16()
-                .collect::<Vec<_>>();
-            let _ = DrawTextW(
-                hdc,
-                &mut title,
-                &mut RECT {
-                    left: 24,
-                    top: 52,
-                    right: 300,
-                    bottom: 78,
-                },
-                DT_SINGLELINE | DT_VCENTER,
-            );
-            let _ = DrawTextW(
-                hdc,
-                &mut instruction,
-                &mut RECT {
-                    left: 24,
-                    top: 82,
-                    right: 300,
-                    bottom: 102,
-                },
-                DT_SINGLELINE | DT_VCENTER,
-            );
-            let _ = DrawTextW(
-                hdc,
-                &mut accept,
-                &mut RECT {
-                    left: 34,
-                    top: 122,
-                    right: 266,
-                    bottom: 144,
-                },
-                DT_SINGLELINE | DT_VCENTER,
-            );
-            let _ = DrawTextW(
-                hdc,
-                &mut decline,
-                &mut RECT {
-                    left: 34,
-                    top: 182,
-                    right: 266,
-                    bottom: 204,
-                },
-                DT_SINGLELINE | DT_VCENTER,
-            );
-            let _ = SetTextColor(hdc, COLORREF(0x00c89b3c));
-            let mut accept_action = "Press to configure Accept\0"
-                .encode_utf16()
-                .collect::<Vec<_>>();
-            let mut decline_action = "Press to configure Decline\0"
-                .encode_utf16()
-                .collect::<Vec<_>>();
-            let _ = DrawTextW(
-                hdc,
-                &mut accept_action,
-                &mut RECT {
-                    left: 34,
-                    top: 142,
-                    right: 266,
-                    bottom: 156,
-                },
-                DT_CENTER | DT_SINGLELINE | DT_VCENTER,
-            );
-            let _ = DrawTextW(
-                hdc,
-                &mut decline_action,
-                &mut RECT {
-                    left: 34,
-                    top: 202,
-                    right: 266,
-                    bottom: 216,
-                },
-                DT_CENTER | DT_SINGLELINE | DT_VCENTER,
-            );
-            let mut cancel = "CANCEL\0".encode_utf16().collect::<Vec<_>>();
-            let mut save = "SAVE\0".encode_utf16().collect::<Vec<_>>();
-            let _ = SetTextColor(hdc, COLORREF(0x00ffffff));
-            let mut cancel_rect = CANCEL_ZONE;
-            cancel_rect.top += TITLEBAR_HEIGHT;
-            cancel_rect.bottom += TITLEBAR_HEIGHT;
-            let mut save_rect = SAVE_ZONE;
-            save_rect.top += TITLEBAR_HEIGHT;
-            save_rect.bottom += TITLEBAR_HEIGHT;
-            let _ = DrawTextW(
-                hdc,
-                &mut cancel,
-                &mut cancel_rect,
-                DT_CENTER | DT_SINGLELINE | DT_VCENTER,
-            );
-            let _ = DrawTextW(
-                hdc,
-                &mut save,
-                &mut save_rect,
-                DT_CENTER | DT_SINGLELINE | DT_VCENTER,
-            );
-        }
-        let _ = EndPaint(hwnd, &paint);
-        return LRESULT(0);
-    }
-    if message == WM_LBUTTONDOWN {
-        let x = (lparam.0 & 0xffff) as i16 as i32;
-        let y = ((lparam.0 >> 16) & 0xffff) as i16 as i32;
-        if let Some(state) = state_ptr.as_mut() {
-            if in_zone(x, y, CLOSE_ZONE) {
-                let _ = SendMessageW(hwnd, WM_CLOSE, WPARAM(0), LPARAM(0));
-                return LRESULT(0);
-            }
-            if in_zone(x, y, MAX_ZONE) {
-                let _ = ShowWindow(
-                    hwnd,
-                    if IsZoomed(hwnd).as_bool() {
-                        SW_RESTORE
-                    } else {
-                        SW_MAXIMIZE
-                    },
-                );
-                return LRESULT(0);
-            }
-            if in_zone(x, y, MIN_ZONE) {
-                let _ = ShowWindow(hwnd, SW_MINIMIZE);
-                return LRESULT(0);
-            }
-            if y < TITLEBAR_HEIGHT {
-                let _ = ReleaseCapture();
-                let _ = SendMessageW(
-                    hwnd,
-                    windows::Win32::UI::WindowsAndMessaging::WM_NCLBUTTONDOWN,
-                    WPARAM(HTCAPTION as usize),
-                    LPARAM(0),
-                );
-                return LRESULT(0);
-            }
-            let y = y - TITLEBAR_HEIGHT;
-            if in_zone(x, y, SAVE_ZONE) {
-                if state.dirty {
-                    if crate::windows::startup::save_bindings(
-                        &state.accept.canonical(),
-                        &state.decline.canonical(),
-                    )
-                    .is_ok()
-                    {
-                        state.dirty = false;
-                        state.message = "Saved hotkeys.".to_owned();
-                        let _ = PostMessageW(state.owner, SETTINGS_UPDATED, WPARAM(0), LPARAM(0));
-                    } else {
-                        state.message = "Could not save shortcut settings".to_owned();
-                    }
-                    let _ = InvalidateRect(hwnd, None, false);
-                }
-                return LRESULT(0);
-            }
-            if in_zone(x, y, CANCEL_ZONE) {
-                let (accept, decline) = crate::windows::startup::load_bindings();
-                state.accept = accept;
-                state.decline = decline;
-                state.dirty = false;
-                state.capture_target = 0;
-                let _ = KillTimer(hwnd, 1);
-                state.message = "Changes cancelled.".to_owned();
-                let _ = InvalidateRect(hwnd, None, false);
-                return LRESULT(0);
-            }
-            if in_zone(x, y, ACCEPT_ZONE) || in_zone(x, y, DECLINE_ZONE) {
-                state.capture_target = if in_zone(x, y, ACCEPT_ZONE) { 1 } else { 2 };
-                state.message = "Listening… press a keyboard key or mouse button".to_owned();
-                for vk in capture_candidates() {
-                    state.previous[vk as usize] = GetAsyncKeyState(vk as i32) < 0;
-                }
-                let _ = SetTimer(hwnd, 1, 30, None);
-                let _ = SetFocus(hwnd);
-                let _ = InvalidateRect(hwnd, None, false);
-            }
-        }
-        return LRESULT(0);
-    }
-    if message == WM_TIMER {
-        if let Some(state) = state_ptr.as_mut() {
-            if state.capture_target != 0 {
-                poll_capture(hwnd, state);
-            }
-        }
-        return LRESULT(0);
-    }
-    if message == WM_NCHITTEST {
-        return LRESULT(windows::Win32::UI::WindowsAndMessaging::HTCLIENT as isize);
-    }
-    if message == WM_CLOSE {
-        let _ = KillTimer(hwnd, 1);
-        let _ = ShowWindow(hwnd, SW_HIDE);
-        return LRESULT(0);
-    }
-    DefWindowProcW(hwnd, message, WPARAM(0), lparam)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn capture_formats_keyboard_and_mouse_bindings() {
-        assert_eq!(candidate_binding(0x70).as_deref(), Some("F1"));
-        assert_eq!(candidate_binding(0x41).as_deref(), Some("A"));
-        assert_eq!(candidate_binding(4).as_deref(), Some("Mouse4"));
+    fn labels_mouse() {
+        assert_eq!(label(&ShortcutBinding::parse("Mouse4").unwrap()), "MB4");
     }
-
     #[test]
-    fn displayed_binding_uses_mouse_keycap_label() {
-        let binding = ShortcutBinding::parse("Mouse5").unwrap();
-        assert_eq!(binding_label(&binding), "MB5");
+    fn captures_inputs() {
+        assert_eq!(candidate_binding(0x70).as_deref(), Some("F1"));
+        assert_eq!(candidate_binding(4).as_deref(), Some("Mouse4"));
     }
 }

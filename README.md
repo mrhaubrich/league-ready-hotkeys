@@ -34,7 +34,7 @@ Shortcut configuration can be inspected with `--check-shortcuts` and changed wit
 
 To configure shortcuts from the app, right-click the tray icon and choose `Configure hotkeys...`. Select `Accept` or `Decline`, then press the desired keyboard combination or mouse button. The pair is validated, saved per user, and reflected by the next notification without restarting the app.
 
-The settings window frame can be validated independently with `league-ready-hotkeys.exe --check-settings`; it opens for 60 seconds with the standard Windows title bar, drag frame, and close button.
+The Slint Fluent-dark settings window can be validated independently with `league-ready-hotkeys.exe --check-settings`; it opens for 60 seconds with native Windows drag, minimize, maximize, and close controls. Changes remain staged until `Save changes`; `Cancel` reloads the persisted bindings.
 
 Arbitrary binding syntax can be validated with `--check-binding Ctrl+Shift+A`, `--check-binding Alt+R`, or `--check-binding Mouse4`.
 
