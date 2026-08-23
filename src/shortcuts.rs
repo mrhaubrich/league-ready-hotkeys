@@ -92,9 +92,38 @@ impl ShortcutBinding {
             }
             modifiers.push(normalized);
         }
-        let valid_input = input.starts_with('F') && input[1..].parse::<u8>().is_ok()
+        let valid_input = input.starts_with('F')
+            && input[1..]
+                .parse::<u8>()
+                .is_ok_and(|n| (1..=12).contains(&n))
             || input.starts_with("MOUSE")
-            || input.len() == 1 && input.chars().next().unwrap().is_ascii_alphanumeric();
+            || input.len() == 1 && input.chars().next().unwrap().is_ascii_alphanumeric()
+            || matches!(
+                input.as_str(),
+                "HOME"
+                    | "END"
+                    | "INSERT"
+                    | "DELETE"
+                    | "PAGEUP"
+                    | "PAGEDOWN"
+                    | "UP"
+                    | "DOWN"
+                    | "LEFT"
+                    | "RIGHT"
+                    | "SPACE"
+                    | "TAB"
+                    | "SEMICOLON"
+                    | "EQUALS"
+                    | "COMMA"
+                    | "MINUS"
+                    | "PERIOD"
+                    | "SLASH"
+                    | "BACKTICK"
+                    | "LBRACKET"
+                    | "BACKSLASH"
+                    | "RBRACKET"
+                    | "QUOTE"
+            );
         if !valid_input {
             return Err(ShortcutError::Unsupported(value.to_owned()));
         }
@@ -102,10 +131,9 @@ impl ShortcutBinding {
     }
 
     pub fn matches_keyboard(&self, virtual_key: u32, modifiers: &[&str]) -> bool {
-        if self.input.len() != 1 {
+        let Some(expected) = binding_virtual_key(&self.input) else {
             return false;
-        }
-        let expected = self.input.as_bytes()[0] as u32;
+        };
         expected == virtual_key
             && self.modifiers.iter().all(|modifier| {
                 modifiers
@@ -124,6 +152,45 @@ impl ShortcutBinding {
         };
         self.input.eq_ignore_ascii_case(normalized)
     }
+}
+
+fn binding_virtual_key(input: &str) -> Option<u32> {
+    if input.len() == 1 && input.as_bytes()[0].is_ascii_alphanumeric() {
+        return Some(input.as_bytes()[0] as u32);
+    }
+    if let Some(number) = input
+        .strip_prefix('F')
+        .and_then(|n| n.parse::<u32>().ok())
+        .filter(|n| (1..=12).contains(n))
+    {
+        return Some(0x6f + number);
+    }
+    Some(match input {
+        "HOME" => 0x24,
+        "END" => 0x23,
+        "INSERT" => 0x2d,
+        "DELETE" => 0x2e,
+        "PAGEUP" => 0x21,
+        "PAGEDOWN" => 0x22,
+        "UP" => 0x26,
+        "DOWN" => 0x28,
+        "LEFT" => 0x25,
+        "RIGHT" => 0x27,
+        "SPACE" => 0x20,
+        "TAB" => 0x09,
+        "SEMICOLON" => 0xba,
+        "EQUALS" => 0xbb,
+        "COMMA" => 0xbc,
+        "MINUS" => 0xbd,
+        "PERIOD" => 0xbe,
+        "SLASH" => 0xbf,
+        "BACKTICK" => 0xc0,
+        "LBRACKET" => 0xdb,
+        "BACKSLASH" => 0xdc,
+        "RBRACKET" => 0xdd,
+        "QUOTE" => 0xde,
+        _ => return None,
+    })
 }
 
 impl ShortcutKey {
@@ -221,6 +288,24 @@ mod tests {
             ShortcutKey::parse("A"),
             Err(ShortcutError::Unsupported(_))
         ));
+    }
+
+    #[test]
+    fn matches_function_navigation_and_punctuation_keys() {
+        assert!(ShortcutBinding::parse("Ctrl+F5")
+            .unwrap()
+            .matches_keyboard(0x74, &["ctrl"]));
+        assert!(ShortcutBinding::parse("Home")
+            .unwrap()
+            .matches_keyboard(0x24, &[]));
+        assert!(ShortcutBinding::parse("Shift+Slash")
+            .unwrap()
+            .matches_keyboard(0xbf, &["shift"]));
+    }
+
+    #[test]
+    fn rejects_out_of_range_function_keys() {
+        assert!(ShortcutBinding::parse("F13").is_err());
     }
     #[test]
     fn parses_keyboard_combo_and_mouse_button() {

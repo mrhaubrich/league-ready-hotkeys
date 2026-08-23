@@ -241,6 +241,10 @@ fn candidates() -> impl Iterator<Item = u32> {
     (0x30..=0x39)
         .chain(0x41..=0x5a)
         .chain(0x70..=0x7b)
+        .chain([
+            0x09, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x2d, 0x2e, 0xba, 0xbb,
+            0xbc, 0xbd, 0xbe, 0xbf, 0xc0, 0xdb, 0xdc, 0xdd, 0xde,
+        ])
         .chain([1, 2, 4, 5])
 }
 fn candidate_binding(vk: u32) -> Option<String> {
@@ -261,6 +265,29 @@ fn candidate_binding(vk: u32) -> Option<String> {
         5 => "Mouse5".into(),
         0x70..=0x7b => format!("F{}", vk - 0x6f),
         0x30..=0x39 | 0x41..=0x5a => char::from_u32(vk)?.to_string(),
+        0x09 => "Tab".into(),
+        0x20 => "Space".into(),
+        0x21 => "PageUp".into(),
+        0x22 => "PageDown".into(),
+        0x23 => "End".into(),
+        0x24 => "Home".into(),
+        0x25 => "Left".into(),
+        0x26 => "Up".into(),
+        0x27 => "Right".into(),
+        0x28 => "Down".into(),
+        0x2d => "Insert".into(),
+        0x2e => "Delete".into(),
+        0xba => "Semicolon".into(),
+        0xbb => "Equals".into(),
+        0xbc => "Comma".into(),
+        0xbd => "Minus".into(),
+        0xbe => "Period".into(),
+        0xbf => "Slash".into(),
+        0xc0 => "Backtick".into(),
+        0xdb => "LBracket".into(),
+        0xdc => "Backslash".into(),
+        0xdd => "RBracket".into(),
+        0xde => "Quote".into(),
         _ => return None,
     };
     Some(if mods.is_empty() {
