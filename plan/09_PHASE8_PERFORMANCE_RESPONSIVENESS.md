@@ -65,7 +65,7 @@ Validation evidence (2026-08-23): automated tests, warnings-denied Clippy, isola
 
 ## LRH-017 — Combine ready-check events with reconciliation polling
 
-Priority: SHOULD. Status: Planned. Dependencies: LRH-015, LRH-016. RICE: 5 × 2 × 0.8 / 2 = 4.0.
+Priority: SHOULD. Status: Complete. Dependencies: LRH-015, LRH-016. RICE: 5 × 2 × 0.8 / 2 = 4.0.
 
 Run the existing LCU WebSocket subscription on the worker for low-latency transitions. Keep a slower GET reconciliation path for initial state, missed events, connection loss, and event/API drift.
 
@@ -78,9 +78,11 @@ Acceptance:
 
 Validation: timestamp event receipt through hook/notification activation with `QueryPerformanceCounter`; kill the socket, inject duplicate events, and verify poll recovery and exactly-once state transitions before a real ready check.
 
+Implementation and validation evidence (2026-08-23): a dedicated event listener forwards parsed ready-check updates independently of the polling worker; WebSocket attempts are bounded to three seconds, reconnects use the capped `ReconnectPolicy`, and shutdown interrupts backoff sleeps. Credential-safe parsing is reused and no event payload is logged. Automated validation passed with 46 tests, warnings-denied Clippy, and an isolated optimized release build. The user ran the rebuilt Windows executable and confirmed all behavior works, including event-listener startup without panic. LRH-017 is complete.
+
 ## LRH-018 — Replace the fixed 25 ms wake loop with message-driven waiting
 
-Priority: SHOULD. Status: Locked. Dependencies: LRH-015, LRH-017. RICE: 3 × 2 × 0.8 / 1.5 = 3.2.
+Priority: SHOULD. Status: Planned. Dependencies: LRH-015, LRH-017. RICE: 3 × 2 × 0.8 / 1.5 = 3.2.
 
 Replace unconditional `PeekMessageW` plus 25 ms sleep with a message/event wait whose timeout is the next scheduled reconciliation. Have hook matches post an owner-window message rather than depend on periodic atomic polling.
 
@@ -116,7 +118,7 @@ Validation evidence (2026-08-23): after the automated evidence above, the user r
 
 ## LRH-020 — Keep ready-check monitoring alive during tray menus
 
-Priority: MUST. Status: Locked. Dependencies: LRH-015, LRH-017. RICE: 5 × 3 × 0.8 / 1 = 12.0.
+Priority: MUST. Status: Planned. Dependencies: LRH-015, LRH-017. RICE: 5 × 3 × 0.8 / 1 = 12.0.
 
 Ensure the synchronous `TrackPopupMenu` interaction cannot pause LCU discovery, event monitoring, reconciliation, or cleanup. Reuse the worker/message architecture rather than replacing the native tray menu.
 
@@ -159,7 +161,7 @@ Validation: run the diagnostic without input past its deadline, repeat with keyb
 
 ## LRH-023 — Remove unnecessary ready-check JSON copies
 
-Priority: COULD. Status: Locked. Dependencies: LRH-016, LRH-017. RICE: 1 × 0.5 × 0.8 / 0.5 = 0.8.
+Priority: COULD. Status: Planned. Dependencies: LRH-016, LRH-017. RICE: 1 × 0.5 × 0.8 / 0.5 = 0.8.
 
 Deserialize HTTP responses directly into the typed ready-check model and use a minimal typed WebSocket envelope, provided benchmarks show a measurable allocation or CPU reduction.
 

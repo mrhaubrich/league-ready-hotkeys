@@ -439,6 +439,41 @@ fn run_background() {
                         );
                     }
                 }
+                league_ready_hotkeys::lcu::background::WorkerEvent::ReadyCheckEvent { ready } => {
+                    let ready = ready.active.then_some(ready);
+                    if let Some(state) = ready.as_ref() {
+                        notification.set_timer(state.timer);
+                    }
+                    if ready.is_some() {
+                        if !observed_ready {
+                            ready_generation = ready_generation.wrapping_add(1).max(1);
+                            action_gate.update_ready_check(true);
+                        }
+                        observed_ready = true;
+                        if pending_action.is_none() && !active {
+                            set_ready_controls(
+                                true,
+                                &mut active,
+                                &mut hotkeys,
+                                shortcut_config,
+                                &mut custom_hooks_active,
+                                &notification,
+                            );
+                        }
+                    } else {
+                        observed_ready = false;
+                        pending_action = None;
+                        action_gate.update_ready_check(false);
+                        set_ready_controls(
+                            false,
+                            &mut active,
+                            &mut hotkeys,
+                            shortcut_config,
+                            &mut custom_hooks_active,
+                            &notification,
+                        );
+                    }
+                }
                 league_ready_hotkeys::lcu::background::WorkerEvent::ActionFinished {
                     request_id,
                     succeeded,

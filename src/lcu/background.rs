@@ -4,6 +4,7 @@ use super::{
     discover_lockfile, parse_lockfile, parse_ready_check, transport::LcuClient, ReadyCheck,
 };
 use crate::app::HotkeyAction;
+use crate::reconnect::ReconnectPolicy;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
@@ -16,6 +17,7 @@ use std::{
 #[derive(Debug, Clone, PartialEq)]
 pub enum WorkerEvent {
     PollFinished { ready: Option<ReadyCheck> },
+    ReadyCheckEvent { ready: ReadyCheck },
     ActionFinished { request_id: u64, succeeded: bool },
 }
 
@@ -134,14 +136,18 @@ impl LiveTransport {
 
 pub struct LcuWorker {
     commands: mpsc::Sender<WorkerCommand>,
+    event_tx: mpsc::Sender<WorkerEvent>,
     events: mpsc::Receiver<WorkerEvent>,
     stopping: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
+    event_thread: Option<JoinHandle<()>>,
 }
 
 impl LcuWorker {
-    pub fn spawn(notify: impl Fn() + Send + 'static) -> Self {
-        Self::spawn_with_transport(LiveTransport::default(), notify)
+    pub fn spawn(notify: impl Fn() + Send + Sync + 'static) -> Self {
+        let mut worker = Self::spawn_with_transport(LiveTransport::default(), notify);
+        worker.start_event_listener();
+        worker
     }
 
     fn spawn_with_transport(
@@ -152,18 +158,37 @@ impl LcuWorker {
         let (event_tx, event_rx) = mpsc::channel();
         let stopping = Arc::new(AtomicBool::new(false));
         let thread_stopping = Arc::clone(&stopping);
+        let worker_events = event_tx.clone();
         let thread = thread::Builder::new()
             .name("lcu-worker".to_owned())
             .spawn(move || {
-                run_worker(transport, command_rx, event_tx, thread_stopping, notify);
+                run_worker(
+                    transport,
+                    command_rx,
+                    worker_events,
+                    thread_stopping,
+                    notify,
+                );
             })
             .expect("spawn LCU worker");
         Self {
             commands: command_tx,
+            event_tx,
             events: event_rx,
             stopping,
             thread: Some(thread),
+            event_thread: None,
         }
+    }
+
+    fn start_event_listener(&mut self) {
+        let stopping = Arc::clone(&self.stopping);
+        let events = self.event_tx.clone();
+        let thread = thread::Builder::new()
+            .name("lcu-events".to_owned())
+            .spawn(move || run_event_listener(events, stopping))
+            .expect("spawn LCU event listener");
+        self.event_thread = Some(thread);
     }
 
     pub fn request_poll(&self) -> bool {
@@ -189,6 +214,9 @@ impl LcuWorker {
         self.stopping.store(true, Ordering::Release);
         let _ = self.commands.send(WorkerCommand::Shutdown);
         let _ = thread.join();
+        if let Some(event_thread) = self.event_thread.take() {
+            let _ = event_thread.join();
+        }
     }
 }
 
@@ -230,6 +258,57 @@ fn run_worker(
             break;
         }
         notify();
+    }
+}
+
+fn run_event_listener(events: mpsc::Sender<WorkerEvent>, stopping: Arc<AtomicBool>) {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("create LCU event runtime");
+    let policy = ReconnectPolicy::default();
+    let mut failures = 0_u32;
+
+    while !stopping.load(Ordering::Acquire) {
+        let client = discover_lockfile()
+            .ok()
+            .and_then(|path| fs::read_to_string(path).ok())
+            .and_then(|contents| parse_lockfile(&contents).ok())
+            .and_then(|credentials| LcuClient::new(&credentials).ok());
+        let Some(client) = client else {
+            failures = failures.saturating_add(1);
+            interruptible_sleep(&stopping, policy.delay(failures));
+            continue;
+        };
+
+        // Construct the timer inside the runtime context. Tokio timers panic
+        // when created from the worker thread before `block_on` enters it.
+        let result = runtime.block_on(async {
+            tokio::time::timeout(Duration::from_secs(3), client.next_ready_check_event()).await
+        });
+        match result {
+            Ok(Ok(ready)) => {
+                failures = 0;
+                if events.send(WorkerEvent::ReadyCheckEvent { ready }).is_err() {
+                    break;
+                }
+            }
+            Ok(Err(_)) | Err(_) => {
+                failures = failures.saturating_add(1);
+                interruptible_sleep(&stopping, policy.delay(failures));
+            }
+        }
+    }
+}
+
+fn interruptible_sleep(stopping: &AtomicBool, duration: Duration) {
+    let deadline = Instant::now() + duration;
+    while !stopping.load(Ordering::Acquire) {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        thread::sleep(remaining.min(Duration::from_millis(50)));
     }
 }
 
@@ -510,5 +589,25 @@ mod tests {
                 ..signature
             }
         ));
+    }
+
+    #[test]
+    fn event_listener_exits_without_connecting_when_stopped() {
+        let stopping = Arc::new(AtomicBool::new(true));
+        let (events, received) = mpsc::channel();
+        run_event_listener(events, Arc::clone(&stopping));
+        assert!(received.try_recv().is_err());
+    }
+
+    #[test]
+    fn event_timeout_is_constructed_inside_runtime_context() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let result = runtime.block_on(async {
+            tokio::time::timeout(Duration::from_millis(10), async { 7_u8 }).await
+        });
+        assert_eq!(result.unwrap(), 7);
     }
 }

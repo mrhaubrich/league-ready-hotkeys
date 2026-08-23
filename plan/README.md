@@ -22,13 +22,13 @@ Selection rule: choose the highest-RICE unblocked task in the active phase; depe
 | LRH-014 | Migrate ready-check notification to Slint | SHOULD | Complete | LRH-010–013 |
 | LRH-015 | Decouple LCU I/O from the Win32 message loop | MUST | Complete | LRH-014 |
 | LRH-016 | Cache League discovery state and reuse the HTTP client | MUST | Complete | LRH-015 |
-| LRH-017 | Combine ready-check events with reconciliation polling | SHOULD | Planned | LRH-015–016 |
-| LRH-018 | Replace the fixed 25 ms wake loop with message-driven waiting | SHOULD | Locked | LRH-015, LRH-017 |
+| LRH-017 | Combine ready-check events with reconciliation polling | SHOULD | Complete | LRH-015–016 |
+| LRH-018 | Replace the fixed 25 ms wake loop with message-driven waiting | SHOULD | Planned | LRH-015, LRH-017 |
 | LRH-019 | Make low-level hook callbacks bounded and allocation-free | MUST | Complete | LRH-014 |
-| LRH-020 | Keep ready-check monitoring alive during tray menus | MUST | Locked | LRH-015, LRH-017 |
+| LRH-020 | Keep ready-check monitoring alive during tray menus | MUST | Planned | LRH-015, LRH-017 |
 | LRH-021 | Move notification child process I/O and teardown off the message thread | SHOULD | Planned | LRH-014–015 |
 | LRH-022 | Bound the low-level hook diagnostic runtime | COULD | Planned | LRH-019 |
-| LRH-023 | Remove unnecessary ready-check JSON copies | COULD | Locked | LRH-016–017 |
+| LRH-023 | Remove unnecessary ready-check JSON copies | COULD | Planned | LRH-016–017 |
 | LRH-024 | Audit dependency and release footprint using measurements | COULD | Planned | LRH-014 |
 
 Locked tasks require a concrete dependency completion and recorded validation evidence. Handoffs include changed files, tests run, failures, assumptions, and plan status updates.
@@ -49,4 +49,4 @@ Phase 5 selection: LRH-009 first, then LRH-010. LRH-011 and LRH-012 remain locke
 
 Phase 7 completion: LRH-014 passed automated diagnostics and release checks, and the user explicitly confirmed the remaining real Windows validation gate on 2026-08-23.
 
-Phase 8 selection: LRH-017 is the highest-RICE unblocked implementation task (RICE 4.0); LRH-021, LRH-022, and LRH-024 are also unblocked. LRH-015 and LRH-016 are complete after automated and user validation. Correctness, explicit-action safety, cleanup, credential secrecy, and validation dependencies override score. JSON and dependency work remains measurement-gated and is skipped when benefit is immaterial.
+Phase 8 selection: LRH-020 is the highest-value unblocked implementation task; LRH-018, LRH-021, LRH-022, LRH-023, and LRH-024 are also unblocked. LRH-015, LRH-016, and LRH-017 are complete after automated and user validation. Correctness, explicit-action safety, cleanup, credential secrecy, and validation dependencies override score. JSON and dependency work remains measurement-gated and is skipped when benefit is immaterial.
