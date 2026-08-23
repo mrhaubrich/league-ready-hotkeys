@@ -17,3 +17,4 @@
 | Notification actions | 5 | LRH-011 | live background validation succeeded: clicking Decline printed the diagnostic and declined the real ready check |
 | Notification preference persistence | 3 | LRH-012 | user confirmed the Notifications checkmark and persistence after restart |
 | Shortcut customization | 5 | LRH-013 | tray `Configure hotkeys...` opens the Slint Fluent-dark capture UI in `src/windows/settings.rs`; dedicated UI event loop, staged Save/Cancel, collision-checked registry persistence, close/reopen lifecycle, and live notification refresh implemented; runtime render plus capture/keycap tests and 29-test suite pass; user capture/restart/ready-check action evidence remains |
+| Slint ready-check notification | 5 | LRH-014 | planned in `plan/08_PHASE7_SLINT_NOTIFICATION.md`; requires child-process UI, bounded IPC, preserved LCU timer/action contract, focus/topmost validation, close/reopen proof, and idle-memory evidence |

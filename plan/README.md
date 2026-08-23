@@ -19,6 +19,7 @@ Selection rule: choose the highest-RICE unblocked task in the active phase; depe
 | LRH-011 | Add notification Accept/Decline buttons | MUST | Complete | LRH-010 |
 | LRH-012 | Add UI/tray status and notification preferences | SHOULD | Complete | LRH-010 |
 | LRH-013 | Add fully customizable keyboard/mouse shortcuts | SHOULD | Planned | LRH-009, LRH-012 |
+| LRH-014 | Migrate ready-check notification to Slint | SHOULD | Planned | LRH-010–013 |
 
 Locked tasks require a concrete dependency completion and recorded validation evidence. Handoffs include changed files, tests run, failures, assumptions, and plan status updates.
 
@@ -35,3 +36,5 @@ Every task must provide all five items before it may be marked `Complete`:
 Compilation alone never satisfies the gate. A task remains `Validation-required` until the user-run scenario has been completed or the task has an explicitly documented, reproducible substitute.
 
 Phase 5 selection: LRH-009 first, then LRH-010. LRH-011 and LRH-012 remain locked until the notification window is integrated and tested.
+
+Phase 7 selection: LRH-014 after LRH-013 validation. The migration must preserve the verified LCU timer contract, explicit user action, and low idle-memory behavior.
