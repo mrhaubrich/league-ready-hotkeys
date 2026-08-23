@@ -2,7 +2,7 @@
 
 pub const RUN_KEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 
-use crate::shortcuts::ShortcutConfig;
+use crate::shortcuts::{ShortcutBinding, ShortcutConfig};
 use std::path::Path;
 use windows::core::{w, Error, Result};
 use windows::Win32::System::Registry::{
@@ -273,6 +273,113 @@ pub fn save_shortcuts(config: ShortcutConfig) -> Result<()> {
     unsafe {
         let _ = RegCloseKey(handle);
     }
+    Ok(())
+}
+
+pub fn load_bindings() -> (ShortcutBinding, ShortcutBinding) {
+    let mut handle = windows::Win32::System::Registry::HKEY::default();
+    let status = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            w!("Software\\LeagueReadyHotkeys"),
+            0,
+            None,
+            REG_OPTION_NON_VOLATILE,
+            KEY_QUERY_VALUE | KEY_SET_VALUE,
+            None,
+            &mut handle,
+            None,
+        )
+    };
+    if status.0 != 0 {
+        return (
+            ShortcutBinding::parse("F1").unwrap(),
+            ShortcutBinding::parse("F2").unwrap(),
+        );
+    }
+    let read = |name| -> Option<String> {
+        let mut buffer = [0u16; 128];
+        let mut size = (buffer.len() * 2) as u32;
+        let status = unsafe {
+            RegGetValueW(
+                handle,
+                None,
+                name,
+                RRF_RT_REG_SZ,
+                None,
+                Some(buffer.as_mut_ptr().cast()),
+                Some(&mut size),
+            )
+        };
+        if status.0 == 0 {
+            Some(
+                String::from_utf16_lossy(&buffer[..size as usize / 2])
+                    .trim_end_matches('\0')
+                    .to_owned(),
+            )
+        } else {
+            None
+        }
+    };
+    let result = match (read(w!("AcceptBinding")), read(w!("DeclineBinding"))) {
+        (Some(a), Some(d)) => Some((a, d)),
+        _ => None,
+    };
+    unsafe {
+        let _ = RegCloseKey(handle);
+    }
+    match result.and_then(|(a, d)| {
+        Some((
+            ShortcutBinding::parse(&a).ok()?,
+            ShortcutBinding::parse(&d).ok()?,
+        ))
+    }) {
+        Some(pair) => pair,
+        None => (
+            ShortcutBinding::parse("F1").unwrap(),
+            ShortcutBinding::parse("F2").unwrap(),
+        ),
+    }
+}
+
+pub fn save_bindings(accept: &str, decline: &str) -> Result<()> {
+    let mut handle = windows::Win32::System::Registry::HKEY::default();
+    let status = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            w!("Software\\LeagueReadyHotkeys"),
+            0,
+            None,
+            REG_OPTION_NON_VOLATILE,
+            KEY_QUERY_VALUE | KEY_SET_VALUE,
+            None,
+            &mut handle,
+            None,
+        )
+    };
+    if status.0 != 0 {
+        return Err(Error::from_win32());
+    }
+    for (name, value) in [
+        (w!("AcceptBinding"), accept),
+        (w!("DeclineBinding"), decline),
+    ] {
+        let bytes = value
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .chain([0, 0])
+            .collect::<Vec<_>>();
+        let status = unsafe { RegSetValueExW(handle, name, 0, REG_SZ, Some(&bytes)) };
+        if status.0 != 0 {
+            unsafe {
+                let _ = RegCloseKey(handle);
+            }
+            return Err(Error::from_win32());
+        }
+    }
+    unsafe {
+        let _ = RegCloseKey(handle);
+    };
     Ok(())
 }
 

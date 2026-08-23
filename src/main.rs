@@ -55,6 +55,36 @@ fn main() {
         }
         return;
     }
+    if mode == Some("--check-bindings") {
+        let (accept, decline) = league_ready_hotkeys::windows::startup::load_bindings();
+        println!(
+            "bindings loaded: accept={:?}+{} decline={:?}+{}",
+            accept.modifiers, accept.input, decline.modifiers, decline.input
+        );
+        return;
+    }
+    if mode == Some("--set-bindings") {
+        let accept = args.get(2).map(String::as_str).unwrap_or_default();
+        let decline = args.get(3).map(String::as_str).unwrap_or_default();
+        let _ =
+            league_ready_hotkeys::shortcuts::ShortcutBinding::parse(accept).unwrap_or_else(|e| {
+                eprintln!("invalid accept binding: {e}");
+                std::process::exit(2);
+            });
+        let _ =
+            league_ready_hotkeys::shortcuts::ShortcutBinding::parse(decline).unwrap_or_else(|e| {
+                eprintln!("invalid decline binding: {e}");
+                std::process::exit(2);
+            });
+        league_ready_hotkeys::windows::startup::save_bindings(accept, decline).unwrap_or_else(
+            |e| {
+                eprintln!("could not save bindings: {e}");
+                std::process::exit(1);
+            },
+        );
+        println!("bindings saved: accept={accept} decline={decline}");
+        return;
+    }
     if mode == Some("--check-input-hook") {
         league_ready_hotkeys::windows::input_hooks::run_diagnostic();
         return;
