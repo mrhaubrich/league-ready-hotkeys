@@ -30,26 +30,26 @@ slint::slint! {
                 height: 76px; border-radius: 9px; background: #0d1c28; border-width: 1px; border-color: #274052;
                 TouchArea { clicked => { root.configure-accept(); } }
                 HorizontalLayout { padding-left: 18px; padding-right: 18px;
-                    Rectangle { horizontal-stretch: 1;
-                        Text { text: "Accept"; color: #f0e6d2; font-size: 17px; horizontal-alignment: left; vertical-alignment: center; }
-                    }
-                    Rectangle { width: 110px; height: 38px; border-radius: 6px; background: #09131d; border-width: 1px; border-color: #0ac8b9;
-                        Text { text: root.accept-binding; color: white; font-size: 15px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
-                    }
+                    Text { text: "Accept"; color: #f0e6d2; font-size: 17px; vertical-alignment: center; }
                     Rectangle { horizontal-stretch: 1; }
+                    Rectangle { width: 110px;
+                        Rectangle { y: (parent.height - self.height) / 2; width: 110px; height: 38px; border-radius: 6px; background: #09131d; border-width: 1px; border-color: #0ac8b9;
+                            Text { text: root.accept-binding; color: white; font-size: 15px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                    }
                 }
             }
             Rectangle {
                 height: 76px; border-radius: 9px; background: #0d1c28; border-width: 1px; border-color: #274052;
                 TouchArea { clicked => { root.configure-decline(); } }
                 HorizontalLayout { padding-left: 18px; padding-right: 18px;
-                    Rectangle { horizontal-stretch: 1;
-                        Text { text: "Decline"; color: #f0e6d2; font-size: 17px; horizontal-alignment: left; vertical-alignment: center; }
-                    }
-                    Rectangle { width: 110px; height: 38px; border-radius: 6px; background: #09131d; border-width: 1px; border-color: #5b7182;
-                        Text { text: root.decline-binding; color: white; font-size: 15px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
-                    }
+                    Text { text: "Decline"; color: #f0e6d2; font-size: 17px; vertical-alignment: center; }
                     Rectangle { horizontal-stretch: 1; }
+                    Rectangle { width: 110px;
+                        Rectangle { y: (parent.height - self.height) / 2; width: 110px; height: 38px; border-radius: 6px; background: #09131d; border-width: 1px; border-color: #5b7182;
+                            Text { text: root.decline-binding; color: white; font-size: 15px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                    }
                 }
             }
             Rectangle { vertical-stretch: 1; }
