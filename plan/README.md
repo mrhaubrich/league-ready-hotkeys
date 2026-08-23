@@ -24,7 +24,7 @@ Selection rule: choose the highest-RICE unblocked task in the active phase; depe
 | LRH-016 | Cache League discovery state and reuse the HTTP client | MUST | Locked | LRH-015 |
 | LRH-017 | Combine ready-check events with reconciliation polling | SHOULD | Locked | LRH-015–016 |
 | LRH-018 | Replace the fixed 25 ms wake loop with message-driven waiting | SHOULD | Locked | LRH-015, LRH-017 |
-| LRH-019 | Make low-level hook callbacks bounded and allocation-free | MUST | Planned | LRH-014 |
+| LRH-019 | Make low-level hook callbacks bounded and allocation-free | MUST | Validation-required | LRH-014 |
 | LRH-020 | Keep ready-check monitoring alive during tray menus | MUST | Locked | LRH-015, LRH-017 |
 | LRH-021 | Move notification child process I/O and teardown off the message thread | SHOULD | Locked | LRH-014–015 |
 | LRH-022 | Bound the low-level hook diagnostic runtime | COULD | Locked | LRH-019 |
@@ -49,4 +49,4 @@ Phase 5 selection: LRH-009 first, then LRH-010. LRH-011 and LRH-012 remain locke
 
 Phase 7 completion: LRH-014 passed automated diagnostics and release checks, and the user explicitly confirmed the remaining real Windows validation gate on 2026-08-23.
 
-Phase 8 selection: LRH-019 is the highest-RICE unblocked task; LRH-015 and LRH-024 are also unblocked. Correctness, explicit-action safety, cleanup, credential secrecy, and validation dependencies override score. JSON and dependency work remains measurement-gated and is skipped when benefit is immaterial.
+Phase 8 selection: LRH-019 is implemented and awaits its real Windows input/ready-check validation. LRH-015 is the highest-RICE unblocked implementation task; LRH-024 is also unblocked. Correctness, explicit-action safety, cleanup, credential secrecy, and validation dependencies override score. JSON and dependency work remains measurement-gated and is skipped when benefit is immaterial.

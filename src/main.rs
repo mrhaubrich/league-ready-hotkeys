@@ -726,15 +726,17 @@ fn run_shortcut_diagnostic() {
         eprintln!("cleanup state remained active");
         std::process::exit(1);
     }
-    if !league_ready_hotkeys::windows::input_hooks::install() {
-        eprintln!("could not install temporary configured input hooks");
-        std::process::exit(1);
-    }
-    league_ready_hotkeys::windows::input_hooks::uninstall();
+    let hook_types = league_ready_hotkeys::windows::input_hooks::check_registration_lifecycle()
+        .unwrap_or_else(|error| {
+            eprintln!("configured input hook diagnostic failed: {error}");
+            std::process::exit(1);
+        });
     println!(
-        "shortcut diagnostic passed: accept={} decline={}; reserved Win bindings rejected; temporary registrations and configured hooks released",
+        "shortcut diagnostic passed: accept={} decline={}; reserved Win bindings rejected; configured hooks keyboard={} mouse={} replaced and released",
         accept.canonical(),
-        decline.canonical()
+        decline.canonical(),
+        hook_types.0,
+        hook_types.1
     );
 }
 

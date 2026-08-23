@@ -165,7 +165,7 @@ impl ShortcutBinding {
     }
 }
 
-fn binding_virtual_key(input: &str) -> Option<u32> {
+pub(crate) fn binding_virtual_key(input: &str) -> Option<u32> {
     if input.len() == 1 && input.as_bytes()[0].is_ascii_alphanumeric() {
         return Some(input.as_bytes()[0] as u32);
     }

@@ -81,7 +81,7 @@ Validation: compare idle wakeups, context switches, CPU, input-to-dispatch laten
 
 ## LRH-019 — Make low-level hook callbacks bounded and allocation-free
 
-Priority: MUST. Status: Planned. Dependencies: LRH-014. RICE: 5 × 3 × 1.0 / 1.5 = 10.0.
+Priority: MUST. Status: Validation-required. Dependencies: LRH-014. RICE: 5 × 3 × 1.0 / 1.5 = 10.0.
 
 Precompile bindings into virtual-key/button values and modifier bitmasks, remove production console writes from hook callbacks, avoid per-event allocation and string normalization, minimize synchronization, and install only the keyboard/mouse hook types required by active bindings.
 
@@ -93,6 +93,12 @@ Acceptance:
 - Hooks still disappear after action, ready-check end, disconnect, and shutdown.
 
 Validation: add binding-equivalence and lifecycle tests; record callback-duration histograms without logging inside callbacks; stress high-rate input and repeat the real-ready-check exactly-once/outside-check/cleanup scenario.
+
+Implementation evidence (2026-08-23): configured bindings are compiled once into packed integer key/button and modifier representations before hook installation. Callback matching now uses atomic binding snapshots, integer comparisons, and an atomic first-action claim; it performs no callback-path heap allocation, mutex acquisition, string normalization, formatting, or console output. Unrelated keyboard events are rejected before modifier-state queries. Installation selects only the keyboard and/or mouse hook types required by the configured pair, cleanly replaces an existing installation, rolls back partial failure, and clears pending actions and bindings before unhooking. Callback timing is opt-in for the diagnostic and records six atomic histogram buckets without logging inside callbacks.
+
+Executable validation: four binding/device/timing tests plus the fast-rejection test cover legacy matching equivalence, keyboard-only, mouse-only, mixed-device selection, timing reset, and unrelated-key behavior. The credential-free shortcut diagnostic now installs the configured device hooks, replaces them once, verifies the observed hook types, and proves final cleanup. Automated evidence: Rustfmt passed; all 40 tests passed; Clippy passed with warnings denied; an isolated optimized release build passed without interrupting the user's running utility; `target\lrh019\release\league-ready-hotkeys.exe --check-shortcuts` printed `configured hooks keyboard=true mouse=false replaced and released` for the current F1/F2 configuration. Source inspection confirms neither low-level callback contains `Vec`, string conversion, mutex locking, or logging.
+
+Remaining validation: run `--check-input-hook` under sustained real keyboard input and record its callback histogram, then restart the optimized background utility and repeat safe Accept/Decline exactly-once checks, outside-ready-check inactivity, and hook cleanup after action, League disconnect, and tray shutdown. LRH-019 remains `Validation-required` until that real Windows scenario is confirmed.
 
 ## LRH-020 — Keep ready-check monitoring alive during tray menus
 
