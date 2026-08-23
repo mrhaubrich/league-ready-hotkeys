@@ -1,17 +1,24 @@
 #![cfg(windows)]
 
+use crate::shortcuts::ShortcutBindings;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
+use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, UnhookWindowsHookEx, HHOOK,
     KBDLLHOOKSTRUCT, MSLLHOOKSTRUCT, WH_KEYBOARD_LL, WH_MOUSE_LL, WM_KEYDOWN, WM_LBUTTONDOWN,
     WM_MBUTTONDOWN, WM_MOUSEMOVE, WM_RBUTTONDOWN, WM_XBUTTONDOWN,
 };
 
+static BINDINGS: OnceLock<ShortcutBindings> = OnceLock::new();
+
 static mut KEY_HOOK: HHOOK = HHOOK(std::ptr::null_mut());
 static mut MOUSE_HOOK: HHOOK = HHOOK(std::ptr::null_mut());
 
 pub fn run_diagnostic() {
+    let (accept, decline) = crate::windows::startup::load_bindings();
+    let _ = BINDINGS.set(ShortcutBindings { accept, decline });
     unsafe {
         KEY_HOOK = SetWindowsHookExW(WH_KEYBOARD_LL, Some(key_proc), HINSTANCE::default(), 0)
             .unwrap_or_default();
@@ -44,7 +51,23 @@ pub fn run_diagnostic() {
 unsafe extern "system" fn key_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code >= 0 && wparam.0 as u32 == WM_KEYDOWN {
         let data = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
-        println!("keyboard input: vk={}", data.vkCode);
+        let mut modifiers = Vec::new();
+        if GetAsyncKeyState(0x11) < 0 {
+            modifiers.push("ctrl");
+        }
+        if GetAsyncKeyState(0x10) < 0 {
+            modifiers.push("shift");
+        }
+        if GetAsyncKeyState(0x12) < 0 {
+            modifiers.push("alt");
+        }
+        if GetAsyncKeyState(0x5B) < 0 || GetAsyncKeyState(0x5C) < 0 {
+            modifiers.push("win");
+        }
+        let action = BINDINGS
+            .get()
+            .and_then(|bindings| bindings.action_for_keyboard(data.vkCode, &modifiers));
+        println!("keyboard input: vk={} action={action:?}", data.vkCode);
     }
     CallNextHookEx(None, code, wparam, lparam)
 }
@@ -56,13 +79,17 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
             WM_LBUTTONDOWN => "left",
             WM_RBUTTONDOWN => "right",
             WM_MBUTTONDOWN => "middle",
-            WM_XBUTTONDOWN => "x",
+            WM_XBUTTONDOWN if (data.mouseData >> 16) == 1 => "mouse4",
+            WM_XBUTTONDOWN => "mouse5",
             WM_MOUSEMOVE => "move",
             _ => "other",
         };
         if event != "move" {
+            let action = BINDINGS
+                .get()
+                .and_then(|bindings| bindings.action_for_mouse(event));
             println!(
-                "mouse input: button={} x={} y={}",
+                "mouse input: button={} x={} y={} action={action:?}",
                 event, data.pt.x, data.pt.y
             );
         }
