@@ -2,6 +2,13 @@
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mode = args.get(1).map(String::as_str);
+    if mode == Some("--notification-child") {
+        if let Err(error) = league_ready_hotkeys::windows::notification::run_child_process() {
+            eprintln!("could not run Slint notification child: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if mode == Some("--settings-window") {
         let owner = args
             .get(2)
@@ -22,6 +29,10 @@ fn main() {
         return;
     }
     if mode == Some("--check-notification") {
+        run_notification_preview();
+        return;
+    }
+    if mode == Some("--check-slint-notification") {
         run_notification_diagnostic();
         return;
     }
@@ -365,20 +376,21 @@ fn run_background() {
                     }
                     active = false;
                     let _ = hotkeys.set_enabled(false);
+                    league_ready_hotkeys::windows::input_hooks::uninstall();
+                    custom_hooks_active = false;
+                    notification.set_active(false);
                 }
             }
             unsafe {
                 DispatchMessageW(&message);
             }
         }
-        let requested = league_ready_hotkeys::windows::notification::take_action();
-        if active && requested != league_ready_hotkeys::windows::notification::ACTION_NONE {
+        if let Some(requested) = notification.take_action().filter(|_| active) {
             if let Some(lcu) = client.as_ref() {
                 let result = runtime.block_on(async {
-                    if requested == league_ready_hotkeys::windows::notification::ACTION_ACCEPT {
-                        lcu.accept().await
-                    } else {
-                        lcu.decline().await
+                    match requested {
+                        league_ready_hotkeys::app::HotkeyAction::Accept => lcu.accept().await,
+                        league_ready_hotkeys::app::HotkeyAction::Decline => lcu.decline().await,
                     }
                 });
                 if let Err(error) = result {
@@ -386,6 +398,8 @@ fn run_background() {
                 }
                 active = false;
                 let _ = hotkeys.set_enabled(false);
+                league_ready_hotkeys::windows::input_hooks::uninstall();
+                custom_hooks_active = false;
                 notification.set_active(false);
             }
         }
@@ -471,43 +485,9 @@ fn run_background() {
 fn run_notification_diagnostic() {
     use std::time::{Duration, Instant};
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DestroyWindow, DispatchMessageW, PeekMessageW, RegisterClassW, CS_HREDRAW,
-        CS_VREDRAW, HWND_MESSAGE, MSG, PM_REMOVE, WNDCLASSW, WS_OVERLAPPED,
-    };
-    let class_name = windows::core::w!("LeagueReadyHotkeysNotificationDiagnostic");
-    unsafe {
-        let _ = RegisterClassW(&WNDCLASSW {
-            lpfnWndProc: Some(tray_wnd_proc),
-            hInstance: Default::default(),
-            lpszClassName: class_name,
-            style: CS_HREDRAW | CS_VREDRAW,
-            ..Default::default()
-        });
-    }
-    let owner = unsafe {
-        CreateWindowExW(
-            Default::default(),
-            class_name,
-            windows::core::w!("League Ready Hotkeys"),
-            WS_OVERLAPPED,
-            0,
-            0,
-            0,
-            0,
-            HWND_MESSAGE,
-            None,
-            None,
-            None,
-        )
-    }
-    .unwrap_or_else(|error| {
-        eprintln!("could not create notification window: {error}");
-        std::process::exit(1);
-    });
     let (accept_binding, decline_binding) = league_ready_hotkeys::windows::startup::load_bindings();
     let notification = league_ready_hotkeys::windows::notification::ReadyCheckNotification::new(
-        owner,
+        HWND(std::ptr::null_mut()),
         &accept_binding,
         &decline_binding,
     )
@@ -515,25 +495,85 @@ fn run_notification_diagnostic() {
         eprintln!("could not create notification: {error}");
         std::process::exit(1);
     });
-    notification.set_active(true);
-    println!("notification diagnostic active for 30 seconds");
-    let deadline = Instant::now() + Duration::from_secs(30);
-    while Instant::now() < deadline {
-        let mut message = MSG::default();
-        while unsafe { PeekMessageW(&mut message, HWND(std::ptr::null_mut()), 0, 0, PM_REMOVE) }
-            .as_bool()
-        {
-            unsafe {
-                DispatchMessageW(&message);
+    for expected in [
+        league_ready_hotkeys::app::HotkeyAction::Accept,
+        league_ready_hotkeys::app::HotkeyAction::Decline,
+    ] {
+        notification.set_timer(0.0);
+        notification.set_active(true);
+        println!(
+            "Slint notification opened for {expected:?}; exercising timer, binding update, and action IPC without League"
+        );
+        let started = Instant::now();
+        let deadline = started + Duration::from_secs(10);
+        let mut updated_bindings = false;
+        let mut requested_action = false;
+        let received = loop {
+            let elapsed = started.elapsed().as_secs_f32();
+            notification.set_timer(elapsed);
+            if !updated_bindings && elapsed >= 2.0 {
+                notification.update_bindings(&accept_binding, &decline_binding);
+                updated_bindings = true;
             }
+            if !requested_action && elapsed >= 3.0 {
+                notification.request_diagnostic_action(expected);
+                notification.request_diagnostic_action(expected);
+                requested_action = true;
+            }
+            if let Some(action) = notification.take_action() {
+                break Some(action);
+            }
+            if Instant::now() >= deadline {
+                break None;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        };
+        notification.set_active(false);
+        if notification.is_running() {
+            eprintln!("notification child did not stop after {expected:?}");
+            std::process::exit(1);
         }
-        std::thread::sleep(Duration::from_millis(25));
+        if notification
+            .last_stop_duration()
+            .is_none_or(|duration| duration > Duration::from_secs(1))
+        {
+            eprintln!("notification child exceeded the one-second shutdown bound");
+            std::process::exit(1);
+        }
+        if received != Some(expected) {
+            eprintln!("expected {expected:?}, received {received:?}");
+            std::process::exit(1);
+        }
+        println!("received exactly one {expected:?}; child stopped cleanly");
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    println!("Slint notification diagnostic passed: update, Accept, close, reopen, Decline, close");
+}
+
+#[cfg(windows)]
+fn run_notification_preview() {
+    use std::time::{Duration, Instant};
+    use windows::Win32::Foundation::HWND;
+
+    let (accept, decline) = league_ready_hotkeys::windows::startup::load_bindings();
+    let notification = league_ready_hotkeys::windows::notification::ReadyCheckNotification::new(
+        HWND(std::ptr::null_mut()),
+        &accept,
+        &decline,
+    )
+    .unwrap_or_else(|error| {
+        eprintln!("could not create notification preview: {error}");
+        std::process::exit(1);
+    });
+    notification.set_active(true);
+    println!("Slint notification preview active for 30 seconds; no League action will be sent");
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(30) {
+        notification.set_timer(started.elapsed().as_secs_f32());
+        std::thread::sleep(Duration::from_millis(100));
     }
     notification.set_active(false);
-    unsafe {
-        let _ = DestroyWindow(owner);
-    }
-    println!("notification diagnostic complete");
+    println!("Slint notification preview complete; child stopped");
 }
 
 #[cfg(windows)]

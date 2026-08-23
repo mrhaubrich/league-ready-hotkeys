@@ -26,7 +26,7 @@ Startup registration can be validated with `--enable-startup`, `--check-startup`
 
 Tray lifecycle can be validated with `--check-tray`; it adds the native tray icon for 30 seconds and removes it on exit.
 
-Notification rendering can be validated without entering a queue with `--check-notification`; it displays the bottom-right prompt for 30 seconds using the persisted Accept and Decline bindings. Run `league-ready-hotkeys.exe --set-bindings Ctrl+Shift+P Mouse4`, then `league-ready-hotkeys.exe --check-notification`, and confirm the Accept button shows three keycaps (`Ctrl`, `Shift`, `P`) while Decline shows an `MB4` keycap.
+Notification rendering can be validated without entering a queue with `--check-notification`; it displays the Slint bottom-right prompt for 30 seconds using the persisted Accept and Decline bindings. Run `league-ready-hotkeys.exe --set-bindings Ctrl+Shift+P Mouse4`, then `league-ready-hotkeys.exe --check-notification`, and confirm the Accept button shows three keycaps (`Ctrl`, `Shift`, `P`) while Decline shows an `MB4` keycap. Run `league-ready-hotkeys.exe --check-slint-notification` for the deterministic credential-free lifecycle diagnostic: it updates timer and bindings, suppresses duplicate Accept/Decline action messages, closes the child within one second, and reopens it for a second cycle without contacting League.
 
 The notification countdown uses the LCU ready-check `timer` field. Live contract validation on 2026-08-22 confirmed that the current client reports elapsed seconds from 0 through 12 before closing the endpoint; the UI converts that authoritative value into remaining seconds and a shrinking progress bar.
 

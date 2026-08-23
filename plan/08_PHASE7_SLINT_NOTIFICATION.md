@@ -16,7 +16,7 @@ Exit criteria:
 
 ## LRH-014 — Migrate ready-check notification to Slint
 
-Priority: SHOULD. Status: Planned. Dependencies: LRH-010, LRH-011, LRH-012, LRH-013.
+Priority: SHOULD. Status: Validation-required. Dependencies: LRH-010, LRH-011, LRH-012, LRH-013.
 
 Implement a Slint notification child mode and a parent-owned controller. Use a narrow IPC contract for visibility/lifecycle, observed timer updates, configured binding labels, and Accept/Decline action messages. Keep LCU transport and action authorization exclusively in the parent process.
 
@@ -35,6 +35,8 @@ Validation:
 - Add a `--check-slint-notification` diagnostic that exercises launch, live timer/binding updates, both click responses, close, and reopen without LCU credentials.
 - Run Rustfmt, the full test suite, Clippy with warnings denied, and release build.
 - User-run scenario: start the release app, enter two safe ready checks, exercise Accept and Decline once each, verify focus remains in the foreground app, then confirm the notification child exits after each check.
+
+Implementation evidence (2026-08-23): the Win32/GDI notification was replaced by a Slint Fluent-dark child process and parent-owned controller. Line-delimited JSON over piped stdin/stdout carries only clamped observed timer values, formatted binding keycaps, lifecycle commands, and explicit action messages; the child has no LCU client or lockfile access. Winit window attributes request bottom-right work-area positioning, always-on-top presentation, taskbar omission, and `active(false)` before window creation; the first guaranteed native-window event adds Win32 `WS_EX_NOACTIVATE` before reporting the child ready. The parent suppresses duplicate child launches and actions, terminates the child after actions/inactive/disconnect/shutdown with a 900 ms graceful bound followed by forced cleanup, and keeps Slint renderer initialization in the short-lived child. Automated evidence: Rustfmt, 35 tests, Clippy with warnings denied, and optimized release build passed. `target\release\league-ready-hotkeys.exe --check-slint-notification` passed timer/binding updates, duplicate Accept suppression, clean close, child reopen, duplicate Decline suppression, and second clean close without LCU credentials. Windows UI automation could locate the topmost `Ready check` window but could not foreground/capture it because the non-activating window reported no foreground process ID; manual foreground-focus validation remains required. LRH-014 is `Validation-required` pending the specified two-ready-check user scenario.
 
 Risks:
 
