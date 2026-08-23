@@ -13,7 +13,7 @@
 | Low idle usage | 4 | LRH-007/008 | reconnect tests and measured release footprint |
 | Reconnect and shutdown | 3 | LRH-007 | `--watch-ready-check` connected to the live client; `--check-tray` removed the icon and exited cleanly |
 | Portable release | 4 | LRH-008 | release validation script passed; tray runtime and idle CPU/working-set measurements were acceptable |
-| Normal launch and ready-check prompt | 5 | LRH-009–LRH-010 | LRH-009 validated: no-argument launch, tray Exit, startup checkmark/toggle, menu ordering, and separator work; notification remains for LRH-010 |
+| Normal launch and ready-check prompt | 5 | LRH-009–LRH-010 | native League-inspired notification and LCU-backed 12-second countdown implemented; current `/help` contract and sanitized live timer range validated; multi-monitor/focus/DPI user evidence remains |
 | Notification actions | 5 | LRH-011 | live background validation succeeded: clicking Decline printed the diagnostic and declined the real ready check |
 | Notification preference persistence | 3 | LRH-012 | user confirmed the Notifications checkmark and persistence after restart |
-| Shortcut customization | 5 | LRH-013 | planned for arbitrary keyboard combinations and mouse buttons; F1/F2 remain the current defaults |
+| Shortcut customization | 5 | LRH-013 | persisted binding display implemented in `src/windows/notification.rs`; `Ctrl+Shift+A` and `Mouse4`-to-`MB4` keycap tests pass; local diagnostic rendered configured `Ctrl+Shift+P`/`Mouse4`; live ready-check action validation remains |

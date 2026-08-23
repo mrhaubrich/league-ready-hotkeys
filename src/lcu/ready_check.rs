@@ -11,10 +11,12 @@ pub enum ReadyCheckResponse {
     Declined,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ReadyCheck {
     pub active: bool,
     pub response: ReadyCheckResponse,
+    /// Seconds elapsed since the ready check began, as reported by LCU.
+    pub timer: f32,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -25,6 +27,8 @@ pub enum ReadyCheckError {
     InvalidState,
     #[error("ready-check player response is invalid")]
     InvalidResponse,
+    #[error("ready-check timer is missing or invalid")]
+    InvalidTimer,
     #[error("event payload is not a ready-check update")]
     NotReadyCheckEvent,
 }
@@ -34,12 +38,15 @@ struct ReadyCheckPayload {
     state: String,
     #[serde(rename = "playerResponse")]
     player_response: String,
+    timer: f32,
 }
 
 pub fn parse_ready_check(value: &Value) -> Result<ReadyCheck, ReadyCheckError> {
     let payload: ReadyCheckPayload = serde_json::from_value(value.clone()).map_err(|error| {
         if value.is_object() && error.to_string().contains("playerResponse") {
             ReadyCheckError::InvalidResponse
+        } else if value.is_object() && error.to_string().contains("timer") {
+            ReadyCheckError::InvalidTimer
         } else if value.is_object() {
             ReadyCheckError::InvalidState
         } else {
@@ -52,9 +59,13 @@ pub fn parse_ready_check(value: &Value) -> Result<ReadyCheck, ReadyCheckError> {
         "Declined" => ReadyCheckResponse::Declined,
         _ => return Err(ReadyCheckError::InvalidResponse),
     };
+    if !payload.timer.is_finite() || payload.timer < 0.0 {
+        return Err(ReadyCheckError::InvalidTimer);
+    }
     Ok(ReadyCheck {
         active: payload.state == "InProgress" && response == ReadyCheckResponse::None,
         response,
+        timer: payload.timer,
     })
 }
 
@@ -79,22 +90,22 @@ mod tests {
 
     #[test]
     fn only_unanswered_in_progress_is_active() {
-        let value = json!({"state":"InProgress","playerResponse":"None"});
+        let value = json!({"state":"InProgress","playerResponse":"None","timer":3.0});
         assert_eq!(
             parse_ready_check(&value).unwrap(),
             ReadyCheck {
                 active: true,
-                response: ReadyCheckResponse::None
+                response: ReadyCheckResponse::None,
+                timer: 3.0
             }
         );
-        let accepted = json!({"state":"InProgress","playerResponse":"Accepted"});
+        let accepted = json!({"state":"InProgress","playerResponse":"Accepted","timer":4.0});
         assert!(!parse_ready_check(&accepted).unwrap().active);
     }
 
     #[test]
     fn parses_lcu_event() {
-        let event =
-            json!({"uri": READY_CHECK, "data": {"state":"InProgress","playerResponse":"None"}});
+        let event = json!({"uri": READY_CHECK, "data": {"state":"InProgress","playerResponse":"None","timer":1.0}});
         assert!(parse_ready_check_event(&event).unwrap().active);
     }
 
@@ -104,6 +115,18 @@ mod tests {
         assert_eq!(
             parse_ready_check_event(&event),
             Err(ReadyCheckError::NotReadyCheckEvent)
+        );
+    }
+
+    #[test]
+    fn rejects_missing_or_negative_timer() {
+        assert_eq!(
+            parse_ready_check(&json!({"state":"InProgress","playerResponse":"None"})),
+            Err(ReadyCheckError::InvalidTimer)
+        );
+        assert_eq!(
+            parse_ready_check(&json!({"state":"InProgress","playerResponse":"None","timer":-1.0})),
+            Err(ReadyCheckError::InvalidTimer)
         );
     }
 }

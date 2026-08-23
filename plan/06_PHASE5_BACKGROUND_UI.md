@@ -36,6 +36,8 @@ Acceptance: the prompt appears on activation, remains above ordinary windows wit
 
 Validation: add a `--check-notification` diagnostic and manual multi-monitor, taskbar, focus, and DPI scenarios.
 
+UI and contract evidence (2026-08-22): the installed client's authenticated, read-only `/help?target=GetLolMatchmakingV1ReadyCheck` contract declares a required float `timer` on `LolMatchmakingMatchmakingReadyCheckResource`. A sanitized live sample observed `timer` increasing from 0 through 12 once per second before the ready-check endpoint closed. The native notification now presents a League-inspired dark surface, Segoe UI typography, a dominant filled Accept card, an outlined Decline card, consistent keyboard/mouse keycaps, a remaining-seconds pill, and a smoothly interpolated progress bar. No credentials or player identifiers were printed or stored. Multi-monitor, focus, and DPI user validation remains required, so LRH-010 remains Planned.
+
 ### LRH-011 — Add notification Accept/Decline buttons
 
 Priority: MUST. Dependencies: LRH-010. Status: Locked.

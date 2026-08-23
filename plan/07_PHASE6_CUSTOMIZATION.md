@@ -35,6 +35,8 @@ Validation:
 - Add a diagnostic command such as `--check-shortcuts` that prints sanitized configured bindings and exercises registration/unregistration.
 - Manually configure, restart, enter a safe ready check, and validate both actions.
 
+Implementation evidence (2026-08-22): the ready-check notification now reads the persisted arbitrary bindings and renders keyboard combinations as individual keycaps and mouse bindings as matching `MB4`/`MB5` keycaps. Unit coverage verifies `Ctrl+Shift+A` keycap ordering and `Mouse4`-to-`MB4` presentation. Automated checks passed: Rustfmt, 24 tests, Clippy with warnings denied, and debug build. The local `--check-notification` diagnostic rendered the configured `Ctrl+Shift+P` and `Mouse4` pair successfully; final user-run ready-check action validation is still required, so LRH-013 remains Planned.
+
 Risks:
 
 - Global shortcut conflicts with other applications.

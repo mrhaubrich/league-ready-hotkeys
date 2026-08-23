@@ -248,18 +248,23 @@ fn run_background() {
     }
     let mut hotkeys = league_ready_hotkeys::windows::hotkeys::HotkeyManager::new(owner);
     let shortcut_config = league_ready_hotkeys::windows::startup::load_shortcuts();
-    let notification =
-        league_ready_hotkeys::windows::notification::ReadyCheckNotification::new(owner)
-            .unwrap_or_else(|error| {
-                eprintln!("could not create notification: {error}");
-                std::process::exit(1);
-            });
+    let (accept_binding, decline_binding) = league_ready_hotkeys::windows::startup::load_bindings();
+    let notification = league_ready_hotkeys::windows::notification::ReadyCheckNotification::new(
+        owner,
+        &accept_binding,
+        &decline_binding,
+    )
+    .unwrap_or_else(|error| {
+        eprintln!("could not create notification: {error}");
+        std::process::exit(1);
+    });
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .expect("create background runtime");
     let mut client: Option<league_ready_hotkeys::lcu::transport::LcuClient> = None;
     let mut active = false;
+    let mut custom_hooks_active = false;
     let mut next_poll = Instant::now();
     println!(
         "League Ready Hotkeys running in background; F1/F2 activate only during a ready check"
@@ -348,6 +353,26 @@ fn run_background() {
                 notification.set_active(false);
             }
         }
+        if active && custom_hooks_active {
+            if let Some(action) = league_ready_hotkeys::windows::input_hooks::take_action() {
+                if let Some(lcu) = client.as_ref() {
+                    let result = runtime.block_on(async {
+                        match action {
+                            league_ready_hotkeys::app::HotkeyAction::Accept => lcu.accept().await,
+                            league_ready_hotkeys::app::HotkeyAction::Decline => lcu.decline().await,
+                        }
+                    });
+                    if let Err(error) = result {
+                        eprintln!("custom shortcut action failed: {error}");
+                    }
+                    active = false;
+                    let _ = hotkeys.set_enabled(false);
+                    league_ready_hotkeys::windows::input_hooks::uninstall();
+                    custom_hooks_active = false;
+                    notification.set_active(false);
+                }
+            }
+        }
         if Instant::now() >= next_poll {
             next_poll = Instant::now() + Duration::from_secs(2);
             if let Ok(path) = league_ready_hotkeys::lcu::discover_lockfile() {
@@ -363,20 +388,31 @@ fn run_background() {
             } else {
                 client = None;
             }
-            let ready = if let Some(lcu) = client.as_ref() {
+            let ready_state = if let Some(lcu) = client.as_ref() {
                 runtime
                     .block_on(lcu.ready_check())
                     .ok()
                     .flatten()
                     .and_then(|payload| league_ready_hotkeys::lcu::parse_ready_check(&payload).ok())
-                    .map(|state| state.active)
-                    .unwrap_or(false)
             } else {
-                false
+                None
             };
+            let ready = ready_state
+                .as_ref()
+                .map(|state| state.active)
+                .unwrap_or(false);
+            if let Some(state) = ready_state.as_ref().filter(|state| state.active) {
+                notification.set_timer(state.timer);
+            }
             if ready != active {
                 active = ready;
                 let _ = hotkeys.set_enabled_with_config(active, shortcut_config);
+                if active {
+                    custom_hooks_active = league_ready_hotkeys::windows::input_hooks::install();
+                } else {
+                    league_ready_hotkeys::windows::input_hooks::uninstall();
+                    custom_hooks_active = false;
+                }
                 notification.set_active(
                     active
                         && league_ready_hotkeys::windows::startup::notifications_enabled()
@@ -387,6 +423,7 @@ fn run_background() {
         std::thread::sleep(Duration::from_millis(25));
     }
     let _ = hotkeys.set_enabled(false);
+    league_ready_hotkeys::windows::input_hooks::uninstall();
     tray.remove();
     unsafe {
         let _ = DestroyWindow(owner);
@@ -432,12 +469,16 @@ fn run_notification_diagnostic() {
         eprintln!("could not create notification window: {error}");
         std::process::exit(1);
     });
-    let notification =
-        league_ready_hotkeys::windows::notification::ReadyCheckNotification::new(owner)
-            .unwrap_or_else(|error| {
-                eprintln!("could not create notification: {error}");
-                std::process::exit(1);
-            });
+    let (accept_binding, decline_binding) = league_ready_hotkeys::windows::startup::load_bindings();
+    let notification = league_ready_hotkeys::windows::notification::ReadyCheckNotification::new(
+        owner,
+        &accept_binding,
+        &decline_binding,
+    )
+    .unwrap_or_else(|error| {
+        eprintln!("could not create notification: {error}");
+        std::process::exit(1);
+    });
     notification.set_active(true);
     println!("notification diagnostic active for 30 seconds");
     let deadline = Instant::now() + Duration::from_secs(30);
