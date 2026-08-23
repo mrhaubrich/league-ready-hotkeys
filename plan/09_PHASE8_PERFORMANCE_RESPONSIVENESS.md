@@ -44,7 +44,7 @@ Validation evidence (2026-08-23): the user rebuilt/restarted the normal release 
 
 ## LRH-016 — Cache League discovery state and reuse the HTTP client
 
-Priority: MUST. Status: Planned. Dependencies: LRH-015. RICE: 3 × 2 × 1.0 / 1 = 6.0.
+Priority: MUST. Status: Complete. Dependencies: LRH-015. RICE: 3 × 2 × 1.0 / 1 = 6.0.
 
 Cache the discovered process/lockfile identity, parsed connection parameters, and `LcuClient`. Reuse the connection pool while the client remains valid; invalidate on process exit, lockfile metadata change, authentication/connection failure, or League restart.
 
@@ -57,9 +57,15 @@ Acceptance:
 
 Validation: use Process Monitor and WPR/WPA to compare ten-minute process-query, lockfile-read, allocation, connection, and TLS counts; restart League and verify recovery plus cleanup.
 
+Implementation evidence (2026-08-23): the LCU worker now retains a client cache keyed by lockfile path, length, and successful last-modified metadata. Stable polls reuse the parsed credentials and reqwest connection pool; cache misses alone perform process discovery, lockfile read/parse, and HTTP client construction. A metadata/path change rebuilds the client and drops the old credential-bearing object. Any ready-check or action transport error invalidates the cache, so League restarts and stale ports cannot retain active state indefinitely. Metadata inspection failure is treated as invalidation rather than an unchanged file.
+
+Executable validation: the cache identity test covers same-path/same-metadata reuse and path/metadata invalidation. Rustfmt passed; all 44 tests passed; Clippy passed with warnings denied; an isolated optimized release build passed. The credential-safe `target\lrh019\release\league-ready-hotkeys.exe --check-lcu-cache` diagnostic passed with `client-builds=1 cache-reuses=1` while League was running. No lockfile content, password, or authenticated URL is printed.
+
+Validation evidence (2026-08-23): automated tests, warnings-denied Clippy, isolated release build, and the credential-safe cache diagnostic passed. The user confirmed the cache/restart validation scenario works. LRH-016 is complete.
+
 ## LRH-017 — Combine ready-check events with reconciliation polling
 
-Priority: SHOULD. Status: Locked. Dependencies: LRH-015, LRH-016. RICE: 5 × 2 × 0.8 / 2 = 4.0.
+Priority: SHOULD. Status: Planned. Dependencies: LRH-015, LRH-016. RICE: 5 × 2 × 0.8 / 2 = 4.0.
 
 Run the existing LCU WebSocket subscription on the worker for low-latency transitions. Keep a slower GET reconciliation path for initial state, missed events, connection loss, and event/API drift.
 

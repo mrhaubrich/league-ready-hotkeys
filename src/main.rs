@@ -48,6 +48,10 @@ fn main() {
         run_lcu_worker_diagnostic();
         return;
     }
+    if mode == Some("--check-lcu-cache") {
+        run_lcu_cache_diagnostic();
+        return;
+    }
     if mode == Some("--set-shortcuts") {
         let config = league_ready_hotkeys::shortcuts::ShortcutConfig::parse(
             args.get(2).map(String::as_str).unwrap_or_default(),
@@ -591,6 +595,20 @@ fn run_lcu_worker_diagnostic() {
         ),
         Err(error) => {
             eprintln!("LCU worker diagnostic failed: {error}");
+            std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn run_lcu_cache_diagnostic() {
+    match league_ready_hotkeys::lcu::background::run_cache_diagnostic() {
+        Ok(result) => println!(
+            "LCU cache diagnostic passed: client-builds={} cache-reuses={}",
+            result.client_builds, result.cache_reuses
+        ),
+        Err(error) => {
+            eprintln!("LCU cache diagnostic failed: {error}");
             std::process::exit(1);
         }
     }
